@@ -52,7 +52,7 @@ app.get("/api/v1/health", (req, res) => {
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 
 const startServer = () => {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Wealth Compass API Server running on port ${PORT}`);
     console.log(`   Health: http://localhost:${PORT}/`);
     console.log(`   API:    http://localhost:${PORT}/api/v1/`);

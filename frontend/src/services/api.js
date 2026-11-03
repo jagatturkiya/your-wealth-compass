@@ -1,4 +1,4 @@
-export const DIRECT_RENDER_URL = "https://financial-report-aq7m.onrender.com/api/v1";
+export const DIRECT_RENDER_URL = "https://your-wealth-compass.onrender.com/api/v1";
 
 const getApiBaseUrl = () => {
   if (import.meta.env && import.meta.env.VITE_API_URL) {

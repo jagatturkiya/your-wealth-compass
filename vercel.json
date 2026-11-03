@@ -1,7 +1,7 @@
 {
   "outputDirectory": "frontend/dist",
   "rewrites": [
-    { "source": "/api/v1/:path*", "destination": "https://financial-report-aq7m.onrender.com/api/v1/:path*" },
+    { "source": "/api/v1/:path*", "destination": "https://your-wealth-compass.onrender.com/api/v1/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

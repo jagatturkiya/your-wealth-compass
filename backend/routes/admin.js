@@ -595,6 +595,13 @@ router.get("/logs", async (req, res) => {
       details: l.details,
     }));
 
+    res.json({ success: true, logs: mapped });
+  } catch (err) {
+    console.error("Get logs error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // -------------------------------------------------------------
 // 5. FORM RESPONSES (/forms Portal)
 // -------------------------------------------------------------

@@ -21,6 +21,7 @@ import {
   ArrowUpDown
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
+import { assignFormResponseAdvisorApi } from "../../services/api";
 
 const STATUS_CONFIGS = {
   new: {
@@ -74,7 +75,30 @@ export function getCleanPhoneDigits(raw) {
   return digits.length >= 10 ? digits.slice(-10) : digits;
 }
 
-export default function FormResponsesTable({ adminToken = "", onRefresh = () => {} }) {
+export default function FormResponsesTable({ teamUsers = [], adminToken = "", onRefresh = () => {} }) {
+  const handleAdvisorAssign = async (responseId, advisorId, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const chosen = teamUsers.find((u) => u.id === advisorId || u._id === advisorId);
+      const payload = chosen
+        ? {
+            advisorId: chosen.id || chosen._id,
+            advisorName: chosen.name,
+            advisorEmail: chosen.email,
+            advisorDesignation: chosen.designation || "Certified Financial Advisor"
+          }
+        : { advisorId: null, advisorName: "", advisorEmail: "", advisorDesignation: "Certified Financial Advisor" };
+
+      const res = await assignFormResponseAdvisorApi(responseId, payload, adminToken);
+      if (res?.success) {
+        setActionNotice(`Assigned to ${payload.advisorName || "Unassigned"}`);
+        setTimeout(() => setActionNotice(""), 3000);
+        onRefresh();
+      }
+    } catch (err) {
+      alert("Failed to assign response: " + err.message);
+    }
+  };
   const { formResponses = [], updateFormResponseStatus, deleteFormResponse } = useApp();
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -420,6 +444,7 @@ export default function FormResponsesTable({ adminToken = "", onRefresh = () => 
                 <th style={{ padding: "14px 16px", textAlign: "left" }}>City</th>
                 <th style={{ padding: "14px 16px", textAlign: "left" }}>Education</th>
                 <th style={{ padding: "14px 16px", textAlign: "left" }}>Profession</th>
+                <th style={{ padding: "14px 16px", textAlign: "left" }}>Assigned Advisor</th>
                 <th style={{ padding: "14px 16px", textAlign: "left" }}>Status</th>
                 <th style={{ padding: "14px 18px", textAlign: "center" }}>Actions</th>
               </tr>

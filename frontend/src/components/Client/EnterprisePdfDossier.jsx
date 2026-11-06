@@ -13,6 +13,16 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
   const dateStr = new Date(lead.submittedAt || Date.now()).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
   const clientCity = lead.city || lead.protection?.city || "";
 
+  // Authorship: ONLY referral source advisor gets credited. If no referral, default strictly to Jagat Turkiya, Certified Financial Planner.
+  const hasReferralSource = Boolean(lead.sourceAdvisor?.advisorName && lead.sourceAdvisor.advisorName.trim());
+  const activeAdvisorName = hasReferralSource
+    ? lead.sourceAdvisor.advisorName.trim()
+    : "Jagat Turkiya";
+
+  const activeAdvisorDesignation = hasReferralSource
+    ? (lead.sourceAdvisor.advisorDesignation || "Certified Financial Advisor")
+    : "Certified Financial Planner";
+
   const [isPrinting, setIsPrinting] = React.useState(false);
   const [printStatusText, setPrintStatusText] = React.useState("Preparing Document Layout...");
   const [screenWidth, setScreenWidth] = React.useState(typeof window !== "undefined" ? window.innerWidth : 1200);
@@ -519,6 +529,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 1: COVER PAGE ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8", position: "relative" }}>
+          
           {/* Subtle top gold accent pattern bar */}
           <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, background: "linear-gradient(90deg, #C8A74D 0%, #1B2035 100%)" }} />
 
@@ -599,8 +610,8 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
               <div><div style={{ fontSize: 9.5, color: "#6B7280", textTransform: "uppercase" }}>GENERATED ON</div><div style={{ fontSize: 11.5, fontWeight: 700, color: "#1B2035" }}>{dateStr}</div></div>
               <div>
                 <div style={{ fontSize: 9.5, color: "#6B7280", textTransform: "uppercase" }}>PREPARED BY</div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "#1B2035" }}>Jagat Turkiya, CFP</div>
-                <div style={{ fontSize: 9.5, color: "#C8A74D", fontWeight: 700 }}>Certified Financial Planner</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#1B2035" }}>{activeAdvisorName}</div>
+                <div style={{ fontSize: 9.5, color: "#C8A74D", fontWeight: 700 }}>{activeAdvisorDesignation}</div>
               </div>
             </div>
           </div>
@@ -608,6 +619,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 2: EXECUTIVE SUMMARY ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -680,6 +692,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 3: FINANCIAL HEALTH & CASHFLOW ANALYSIS ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -806,6 +819,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 4: GOAL PLANNING & INFLATION IMPACT ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -921,6 +935,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 5: RETIREMENT BLUEPRINT & SWP SIMULATION ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -1046,6 +1061,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 6: RISK PROTECTION & INSURANCE AUDIT ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -1175,6 +1191,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 7: FINANCIAL ACTION ROADMAP (90-DAY PLAN) ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -1260,6 +1277,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 8: WEALTH ALLOCATION BLUEPRINT ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -1335,6 +1353,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 9: FINANCIAL PROJECTION & SCENARIO ANALYSIS ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -1450,6 +1469,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
 
         {/* ================= PAGE 10: EXECUTIVE CONCLUSION & CLIENT SUMMARY ================= */}
         <div className="epdf-page" style={{ background: "#FCFBF8" }}>
+          
           <div>
             <div className="epdf-header" style={{ borderColor: "#E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 16 }}>
               <div>
@@ -1508,7 +1528,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
             <div style={{ background: "rgba(200, 167, 77, 0.08)", border: "1px solid rgba(200, 167, 77, 0.3)", borderLeft: "4px solid #C8A74D", borderRadius: 10, padding: 12, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: "#C8A74D", textTransform: "uppercase" }}>CONSULTANT ADVISORY RECOMMENDATION</div>
-                <div style={{ fontSize: 9.5, fontWeight: 800, color: "#1B2035" }}>Advisor: Jagat Turkiya, CFP (Certified Financial Planner)</div>
+                <div style={{ fontSize: 9.5, fontWeight: 800, color: "#1B2035" }}>Advisor: {activeAdvisorName} ({activeAdvisorDesignation})</div>
               </div>
               <p style={{ fontSize: 10.5, color: "#1B2035", margin: 0, lineHeight: 1.45 }}>
                 Based on the audited financial data, {lead.name} possesses strong net monthly savings ({INR_L(r.monthlySurplus)}/mo) to achieve all stated goals. Priority should be given to closing the {INR_L(r.termGap)} term insurance gap before expanding equity investments. Annual reviews are recommended.
@@ -1541,7 +1561,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, paddingTop: 4, borderTop: "1px dashed #E5E7EB", fontSize: 9, color: "#94A3B8" }}>
                 <span>Generated On: {dateStr}</span>
-                <span><b>Prepared By:</b> Jagat Turkiya, CFP (Certified Financial Planner)</span>
+                <span><b>Prepared By:</b> {activeAdvisorName} ({activeAdvisorDesignation})</span>
               </div>
             </div>
           </div>

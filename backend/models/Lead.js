@@ -22,11 +22,19 @@ const leadSchema = new mongoose.Schema({
   protection:      { type: Object, default: {} },
   pdfUrl:          { type: String, default: null },
   userId:          { type: String, default: "", index: true },
+  referralCode:    { type: String, default: "", index: true },
+  sourceAdvisor: {
+    advisorId:          { type: String, default: "" },
+    advisorName:        { type: String, default: "" },
+    advisorDesignation: { type: String, default: "Certified Financial Advisor" },
+    referralCode:       { type: String, default: "" }
+  },
   assignedTo: {
-    advisorId:    { type: String, default: null, index: true },
-    advisorName:  { type: String, default: "" },
-    advisorEmail: { type: String, default: "" },
-    assignedAt:   { type: Date, default: null }
+    advisorId:          { type: String, default: null, index: true },
+    advisorName:        { type: String, default: "" },
+    advisorEmail:       { type: String, default: "" },
+    advisorDesignation: { type: String, default: "Certified Financial Advisor" },
+    assignedAt:         { type: Date, default: null }
   },
   leadStatus: {
     type: String,

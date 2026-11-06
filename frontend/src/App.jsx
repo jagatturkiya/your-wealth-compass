@@ -69,6 +69,20 @@ function MainContent() {
       const hash = window.location.hash.toLowerCase();
       const fullUrl = (path + search + hash).toLowerCase();
 
+      // Client referral tracking: capture ?ref=... or ?advisor=... or ?partner=...
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        let refCode = urlParams.get("ref") || urlParams.get("advisor") || urlParams.get("partner") || "";
+        if (!refCode && path.includes("/ref/")) {
+          refCode = path.split("/ref/")[1].split("/")[0].split("?")[0];
+        }
+        if (refCode && refCode.trim()) {
+          const cleanRef = refCode.trim().toLowerCase();
+          localStorage.setItem("ff_referral_code", cleanRef);
+          sessionStorage.setItem("ff_referral_code", cleanRef);
+        }
+      } catch (e) {}
+
       const isFormsAccess =
         fullUrl.includes("/forms") ||
         fullUrl.includes("/form") ||

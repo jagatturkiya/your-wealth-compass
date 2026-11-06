@@ -1,6 +1,10 @@
 import React, { useState } from "react";
-import { Mail, Search, Trash2, Eye, Calendar, User, MessageSquare, Tag, X, Sparkles, Phone, MessageCircle, MapPin, Briefcase, GraduationCap } from "lucide-react";
+import {
+  Mail, Search, Trash2, Eye, Calendar, User, MessageSquare, Tag, X, Sparkles,
+  Phone, MessageCircle, MapPin, Briefcase, GraduationCap, UserCheck, Shield, Globe, Lock
+} from "lucide-react";
 import { useApp } from "../../context/AppContext";
+import { assignEnquiryAdvisorApi } from "../../services/api";
 
 function formatPhoneDisplay(raw) {
   if (!raw) return "—";
@@ -48,11 +52,22 @@ export function parseFormProfile(msg) {
   };
 }
 
-export default function EnquiryTable() {
+export default function EnquiryTable({
+  enquiries = null,
+  teamUsers = [],
+  adminRole = "superadmin",
+  adminToken = "",
+  onRefresh = () => {}
+}) {
   const { contactEnquiries = [], deleteContactEnquiry } = useApp();
+  const effectiveEnquiries = Array.isArray(enquiries) ? enquiries : contactEnquiries;
+
   const [searchTerm, setSearchTerm] = useState("");
   const [topicFilter, setTopicFilter] = useState("all");
+  const [advisorFilter, setAdvisorFilter] = useState("all");
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
+  const [assigningId, setAssigningId] = useState(null);
+  const [actionNotice, setActionNotice] = useState("");
 
   const topicsList = [
     "All Topics",
@@ -65,8 +80,61 @@ export default function EnquiryTable() {
     "General Enquiry / Other"
   ];
 
-  // Filter enquiries
-  const filteredEnquiries = contactEnquiries.filter((enq) => {
+  const handleAdvisorAssign = async (enquiryId, chosenValue, e) => {
+    if (e) e.stopPropagation();
+    try {
+      setAssigningId(enquiryId);
+
+      let payload = {
+        advisorId: null,
+        advisorName: "Unassigned",
+        advisorEmail: "",
+        advisorDesignation: "Certified Financial Advisor"
+      };
+
+      if (chosenValue === "all_advisors") {
+        payload = {
+          advisorId: "all_advisors",
+          advisorName: "All Advisors (Shared)",
+          advisorEmail: "",
+          advisorDesignation: "Team Visibility"
+        };
+      } else if (chosenValue === "superadmin_only") {
+        payload = {
+          advisorId: "superadmin_only",
+          advisorName: "Super Admin Only (Private)",
+          advisorEmail: "",
+          advisorDesignation: "Super Admin Restricted"
+        };
+      } else if (chosenValue) {
+        const chosen = teamUsers.find((u) => (u.id || u._id) === chosenValue);
+        if (chosen) {
+          payload = {
+            advisorId: chosen.id || chosen._id,
+            advisorName: chosen.name,
+            advisorEmail: chosen.email,
+            advisorDesignation: chosen.designation || "Certified Financial Advisor"
+          };
+        }
+      }
+
+      const res = await assignEnquiryAdvisorApi(enquiryId, payload, adminToken);
+      if (res?.success) {
+        setActionNotice(`✓ Visibility updated: ${payload.advisorName}`);
+        setTimeout(() => setActionNotice(""), 3000);
+        onRefresh();
+        if (selectedEnquiry && (selectedEnquiry.id === enquiryId || selectedEnquiry._id === enquiryId)) {
+          setSelectedEnquiry({ ...selectedEnquiry, assignedTo: payload });
+        }
+      }
+    } catch (err) {
+      alert("Failed to assign enquiry: " + err.message);
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  const filteredEnquiries = effectiveEnquiries.filter((enq) => {
     const rawMob = getPhoneRaw(enq);
     const nameMatch = (enq.name || "").toLowerCase().includes(searchTerm.toLowerCase());
     const emailMatch = (enq.email || "").toLowerCase().includes(searchTerm.toLowerCase());
@@ -80,14 +148,26 @@ export default function EnquiryTable() {
       enq.topic === topicFilter ||
       (topicFilter === "Application Form" && (enq.topic === "Application Form" || enq.topic?.startsWith("Form Profile")));
 
-    return searchPass && topicPass;
+    const currentAdvId = enq.assignedTo?.advisorId || "";
+    let advPass = true;
+    if (advisorFilter === "unassigned") {
+      advPass = !currentAdvId;
+    } else if (advisorFilter === "all_advisors") {
+      advPass = currentAdvId === "all_advisors";
+    } else if (advisorFilter === "superadmin_only") {
+      advPass = currentAdvId === "superadmin_only";
+    } else if (advisorFilter !== "all") {
+      advPass = currentAdvId === advisorFilter;
+    }
+
+    return searchPass && topicPass && advPass;
   });
 
   const handleDelete = (id, e) => {
     e.stopPropagation();
     if (window.confirm("Are you sure you want to delete this advisory enquiry?")) {
       deleteContactEnquiry(id);
-      if (selectedEnquiry && selectedEnquiry.id === id) {
+      if (selectedEnquiry && (selectedEnquiry.id === id || selectedEnquiry._id === id)) {
         setSelectedEnquiry(null);
       }
     }
@@ -98,589 +178,309 @@ export default function EnquiryTable() {
     if ((topic || "").includes("Financial")) return { bg: "rgba(201, 154, 75, 0.15)", text: "#C99A4B", border: "rgba(201, 154, 75, 0.4)" };
     if ((topic || "").includes("Retirement")) return { bg: "rgba(95, 168, 160, 0.15)", text: "#5FA8A0", border: "rgba(95, 168, 160, 0.4)" };
     if ((topic || "").includes("Protection") || (topic || "").includes("Insurance")) return { bg: "rgba(244, 63, 94, 0.15)", text: "#F43F5E", border: "rgba(244, 63, 94, 0.4)" };
-    if ((topic || "").includes("Investment")) return { bg: "rgba(16, 185, 129, 0.15)", text: "#10B981", border: "rgba(16, 185, 129, 0.4)" };
-    return { bg: "rgba(129, 140, 248, 0.15)", text: "#818CF8", border: "rgba(129, 140, 248, 0.4)" };
+    return { bg: "rgba(255, 255, 255, 0.05)", text: "var(--text-fog)", border: "var(--border-subtle)" };
   };
 
   return (
-    <div style={{ textAling: "left" }}>
-      {/* SEARCH AND FILTER BAR */}
-      <div
-        style={{
-          display: "flex",
-          justify: "space-between",
-          alignItems: "center",
-          gap: 16,
-          marginBottom: 20,
-          flexWrap: "wrap"
-        }}
-      >
-        <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
-          <Search size={18} color="var(--text-fog)" style={{ position: "absolute", left: 16, top: 16 }} />
-          <input
-            type="text"
-            className="ff-input-56px"
-            placeholder="Search by name, email, or message..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ width: "100%", paddingLeft: 46 }}
-          />
+    <div style={{ width: "100%", textAlign: "left" }}>
+      {actionNotice && (
+        <div style={{ background: "rgba(16, 185, 129, 0.15)", border: "1px solid rgba(16, 185, 129, 0.4)", color: "#34D399", padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+          {actionNotice}
         </div>
+      )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Tag size={16} color="var(--text-fog)" />
+      {/* TOOLBAR */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", flex: 1, minWidth: 280 }}>
+          {/* Search Bar */}
+          <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+            <Search size={16} color="var(--text-fog)" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }} />
+            <input
+              type="text"
+              placeholder="Search enquiries by name, email, phone, city..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="ff-input"
+              style={{ paddingLeft: 38, width: "100%" }}
+            />
+          </div>
+
+          {/* Visibility / Advisor Filter (Super Admin only) */}
+          {adminRole === "superadmin" && (
+            <select
+              className="ff-select"
+              value={advisorFilter}
+              onChange={(e) => setAdvisorFilter(e.target.value)}
+              style={{ minWidth: 170 }}
+            >
+              <option value="all">All Visibility</option>
+              <option value="all_advisors">🌐 Shared With All Advisors</option>
+              <option value="superadmin_only">👑 Super Admin Only</option>
+              <option value="unassigned">⚠️ Unassigned / Hidden</option>
+              <optgroup label="Filter By Advisor">
+                {teamUsers.map((u) => (
+                  <option key={u.id || u._id} value={u.id || u._id}>
+                    👤 {u.name}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          )}
+
+          {/* Topic Filter */}
           <select
+            className="ff-select"
             value={topicFilter}
             onChange={(e) => setTopicFilter(e.target.value)}
-            style={{
-              height: 52,
-              borderRadius: 14,
-              background: "rgba(255, 255, 255, 0.04)",
-              border: "1px solid var(--border-subtle)",
-              color: "var(--text-main)",
-              padding: "0 16px",
-              fontSize: 14,
-              cursor: "pointer"
-            }}
+            style={{ minWidth: 160 }}
           >
-            <option value="all" style={{ background: "#0B0D14", color: "#FFF" }}>All Topics ({contactEnquiries.length})</option>
-            {topicsList.slice(1).map((t) => (
-              <option key={t} value={t} style={{ background: "#0B0D14", color: "#FFF" }}>
+            {topicsList.map((t) => (
+              <option key={t} value={t === "All Topics" ? "all" : t}>
                 {t}
               </option>
             ))}
           </select>
         </div>
+
+        <div style={{ fontSize: 12.5, color: "var(--text-fog)", fontWeight: 600 }}>
+          Showing <span style={{ color: "var(--text-main)", fontWeight: 700 }}>{filteredEnquiries.length}</span> of {effectiveEnquiries.length} enquiries
+        </div>
       </div>
 
-      {/* TABLE DATA CONTAINER */}
-      <div
-        className="ff-card-glass"
-        style={{
-          borderRadius: 20,
-          border: "1px solid var(--border-subtle)",
-          overflow: "hidden",
-          background: "var(--bg-surface)"
-        }}
-      >
-        {filteredEnquiries.length === 0 ? (
-          <div style={{ padding: "60px 24px", textAlign: "center" }}>
-            <Mail size={40} color="var(--text-fog)" style={{ margin: "0 auto 16px", opacity: 0.5 }} />
-            <h3 style={{ fontSize: 18, color: "var(--text-main)", margin: "0 0 6px" }}>No Advisory Enquiries Found</h3>
-            <p style={{ fontSize: 13.5, color: "var(--text-fog)", margin: 0 }}>
-              {contactEnquiries.length === 0
-                ? "Submissions via the Contact / Advisory form will appear here in real-time."
-                : "No enquiries match your search filter."}
-            </p>
+      {/* TABLE */}
+      {filteredEnquiries.length === 0 ? (
+        <div style={{ padding: "48px 24px", textAlign: "center", background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 16, color: "var(--text-fog)" }}>
+          <Mail size={36} color="var(--text-fog)" style={{ margin: "0 auto 12px", opacity: 0.5 }} />
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-main)", marginBottom: 4 }}>
+            No Enquiries Found
           </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 14 }}>
-              <thead>
-                <tr
-                  style={{
-                    background: "rgba(255, 255, 255, 0.02)",
-                    borderBottom: "1px solid var(--border-subtle)",
-                    color: "var(--text-fog)",
-                    fontSize: 11.5,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em"
-                  }}
-                >
-                  <th style={{ padding: "16px 20px" }}>Date & Time</th>
-                  <th style={{ padding: "16px 20px" }}>Client Name</th>
-                  <th style={{ padding: "16px 20px" }}>Phone Number</th>
-                  <th style={{ padding: "16px 20px" }}>Email Address</th>
-                  <th style={{ padding: "16px 20px" }}>Enquiry Topic</th>
-                  <th style={{ padding: "16px 20px" }}>Message Preview</th>
-                  <th style={{ padding: "16px 20px", textAlign: "right" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEnquiries.map((enq) => {
-                  const topicStyle = getTopicColor(enq.topic);
-                  const rawPhone = getPhoneRaw(enq);
-                  const cleanPhone = getCleanPhoneDigits(rawPhone);
-                  const displayPhone = formatPhoneDisplay(rawPhone);
-                  const dateStr = enq.submittedAt
-                    ? new Date(enq.submittedAt).toLocaleString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit"
-                      })
-                    : "Recent";
+          <p style={{ fontSize: 13, margin: 0 }}>Try clearing your search or changing the filter options.</p>
+        </div>
+      ) : (
+        <div className="ff-table-wrapper" style={{ overflowX: "auto" }}>
+          <table className="ff-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                <th style={{ padding: "14px 16px" }}>Date & Time</th>
+                <th style={{ padding: "14px 16px" }}>Client Name</th>
+                <th style={{ padding: "14px 16px" }}>Phone Number</th>
+                <th style={{ padding: "14px 16px" }}>Email</th>
+                <th style={{ padding: "14px 16px" }}>Visibility / Assigned</th>
+                <th style={{ padding: "14px 16px" }}>Topic</th>
+                <th style={{ padding: "14px 16px" }}>Message</th>
+                <th style={{ padding: "14px 16px", textAlign: "right" }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEnquiries.map((enq) => {
+                const enqId = enq.id || enq._id;
+                const topicStyle = getTopicColor(enq.topic);
+                const rawPhone = getPhoneRaw(enq);
+                const cleanPhone = getCleanPhoneDigits(rawPhone);
+                const displayPhone = formatPhoneDisplay(rawPhone);
+                const assignedAdvId = enq.assignedTo?.advisorId || "";
 
-                  return (
-                    <tr
-                      key={enq.id}
-                      style={{
-                        borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-                        transition: "background 0.2s ease",
-                        cursor: "pointer"
-                      }}
-                      onClick={() => setSelectedEnquiry(enq)}
-                      className="ff-table-row-hover"
-                    >
-                      <td style={{ padding: "16px 20px", whiteSpace: "nowrap", color: "var(--text-fog)", fontSize: 13 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <Calendar size={14} color="var(--accent-gold)" />
-                          {dateStr}
-                        </div>
-                      </td>
+                return (
+                  <tr
+                    key={enqId}
+                    onClick={() => setSelectedEnquiry(enq)}
+                    style={{ borderBottom: "1px solid var(--border-subtle)", cursor: "pointer", transition: "background 0.15s ease" }}
+                    className="ff-table-row-hover"
+                  >
+                    <td style={{ padding: "14px 16px", whiteSpace: "nowrap", color: "var(--text-fog)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <Calendar size={13} color="var(--accent-gold)" />
+                        {enq.submittedAt ? new Date(enq.submittedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Recent"}
+                      </div>
+                    </td>
 
-                      <td style={{ padding: "16px 20px", fontWeight: 600, color: "var(--text-main)", whiteSpace: "nowrap" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: "50%",
-                              background: "rgba(201, 154, 75, 0.15)",
-                              border: "1px solid var(--border-gold)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "var(--accent-gold)",
-                              fontSize: 13,
-                              fontWeight: 700
-                            }}
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "var(--text-main)", whiteSpace: "nowrap" }}>
+                      {enq.name || "Client"}
+                    </td>
+
+                    <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-main)" }}>
+                        <Phone size={12} color="var(--accent-gold)" />
+                        <span>{displayPhone}</span>
+                      </div>
+                    </td>
+
+                    <td style={{ padding: "14px 16px", color: "var(--text-fog)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {enq.email || "—"}
+                    </td>
+
+                    {/* ASSIGNED ADVISOR / VISIBILITY DROPDOWN */}
+                    <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                      {adminRole === "superadmin" ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <select
+                            className="ff-select"
+                            value={assignedAdvId}
+                            onChange={(e) => handleAdvisorAssign(enqId, e.target.value, e)}
+                            style={{ padding: "4px 8px", fontSize: 12, minWidth: 155 }}
+                            disabled={assigningId === enqId}
                           >
-                            {(enq.name || "U")[0].toUpperCase()}
-                          </div>
-                          {enq.name || "Advisory Client"}
-                        </div>
-                      </td>
-
-                      {/* Phone Column */}
-                      <td style={{ padding: "16px 20px", whiteSpace: "nowrap" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700, color: "#FFFFFF", fontSize: 13.5 }}>
-                            <Phone size={13} color="var(--accent-gold)" />
-                            <span>{displayPhone}</span>
-                          </div>
-                          {cleanPhone && (
-                            <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-                              <a
-                                href={`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hello ${enq.name || ""}, thank you for contacting Your Wealth Compass.`)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 4,
-                                  background: "rgba(37, 211, 102, 0.14)",
-                                  border: "1px solid rgba(37, 211, 102, 0.35)",
-                                  borderRadius: 6,
-                                  padding: "2px 8px",
-                                  color: "#25D366",
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  textDecoration: "none"
-                                }}
-                                title="Chat on WhatsApp"
-                              >
-                                <MessageCircle size={11} /> WhatsApp
-                              </a>
-                            </div>
+                            <option value="">⚠️ Unassigned (Hidden)</option>
+                            <option value="all_advisors">🌐 All Advisors (Shared)</option>
+                            <option value="superadmin_only">👑 Super Admin Only</option>
+                            <optgroup label="Assign Specific Advisor">
+                              {teamUsers.map((u) => (
+                                <option key={u.id || u._id} value={u.id || u._id}>
+                                  👤 {u.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          </select>
+                          {enq.referralCode && (
+                            <span style={{ fontSize: 10, color: "var(--accent-gold)", fontFamily: "var(--font-mono)" }}>
+                              🔗 Ref: {enq.referralCode}
+                            </span>
                           )}
                         </div>
-                      </td>
-
-                      <td style={{ padding: "16px 20px", color: "var(--text-fog)", whiteSpace: "nowrap" }}>
-                        <a
-                          href={`mailto:${enq.email}`}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ color: "var(--accent-teal)", textDecoration: "none" }}
-                        >
-                          {enq.email || "No email provided"}
-                        </a>
-                      </td>
-
-                      <td style={{ padding: "16px 20px", whiteSpace: "nowrap" }}>
-                        {enq.topic?.startsWith("Form Profile") || parseFormProfile(enq.message) ? (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              padding: "4px 12px",
-                              borderRadius: 20,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              background: "rgba(201, 154, 75, 0.15)",
-                              color: "var(--accent-gold)",
-                              border: "1px solid rgba(201, 154, 75, 0.3)"
-                            }}
-                          >
-                            Application Form
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent-gold)" }}>
+                            {assignedAdvId === "all_advisors" ? "🌐 Shared With Team" : `👤 ${enq.assignedTo?.advisorName || "Assigned to You"}`}
                           </span>
-                        ) : (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              padding: "4px 12px",
-                              borderRadius: 20,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              background: topicStyle.bg,
-                              color: topicStyle.text,
-                              border: `1px solid ${topicStyle.border}`
-                            }}
-                          >
-                            {enq.topic || "General Enquiry"}
-                          </span>
-                        )}
-                      </td>
-
-                      <td style={{ padding: "16px 20px", fontSize: 13, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {(() => {
-                          const prof = parseFormProfile(enq.message);
-                          if (prof) {
-                            return (
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                {prof.city && (
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#5FA8A0", fontWeight: 700, fontSize: 12.5 }}>
-                                    <MapPin size={12} /> {prof.city}
-                                  </span>
-                                )}
-                                {prof.profession && (
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--accent-gold)", fontWeight: 700, fontSize: 12.5 }}>
-                                    <Briefcase size={12} /> {prof.profession}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          }
-                          return <span style={{ color: "var(--text-fog)" }}>{enq.message || "(No message written)"}</span>;
-                        })()}
-                      </td>
-
-                      <td style={{ padding: "16px 20px", textAlign: "right", whiteSpace: "nowrap" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedEnquiry(enq);
-                            }}
-                            title="View Message"
-                            style={{
-                              padding: "6px 12px",
-                              borderRadius: 8,
-                              background: "rgba(255, 255, 255, 0.06)",
-                              border: "1px solid var(--border-subtle)",
-                              color: "var(--text-main)",
-                              fontSize: 12.5,
-                              cursor: "pointer",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6
-                            }}
-                          >
-                            <Eye size={14} color="var(--accent-gold)" /> View
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={(e) => handleDelete(enq.id, e)}
-                            title="Delete Enquiry"
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 8,
-                              background: "rgba(239, 68, 68, 0.1)",
-                              border: "1px solid rgba(239, 68, 68, 0.25)",
-                              color: "#EF4444",
-                              fontSize: 12.5,
-                              cursor: "pointer"
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {enq.referralCode && (
+                            <span style={{ fontSize: 10, color: "var(--text-fog)", fontFamily: "var(--font-mono)" }}>
+                              🔗 Ref: {enq.referralCode}
+                            </span>
+                          )}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                      )}
+                    </td>
 
-      {/* ENQUIRY DETAIL MODAL */}
+                    <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                      <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 12, fontSize: 11.5, fontWeight: 600, background: topicStyle.bg, color: topicStyle.text, border: `1px solid ${topicStyle.border}` }}>
+                        {enq.topic || "General"}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: "14px 16px", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-fog)" }}>
+                      {enq.message || "—"}
+                    </td>
+
+                    <td style={{ padding: "14px 16px", textAlign: "right", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEnquiry(enq)}
+                          className="ff-btn-ghost"
+                          style={{ padding: "4px 8px", fontSize: 12 }}
+                        >
+                          <Eye size={13} />
+                        </button>
+                        {adminRole === "superadmin" && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleDelete(enqId, e)}
+                            className="ff-btn-ghost"
+                            style={{ padding: "4px 8px", fontSize: 12, color: "#EF4444" }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* DETAIL MODAL */}
       {selectedEnquiry && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(5, 6, 10, 0.85)",
-            backdropFilter: "blur(12px)",
-            zIndex: 99999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20
-          }}
-          onClick={() => setSelectedEnquiry(null)}
-        >
-          <div
-            className="ff-card-glass"
-            style={{
-              maxWidth: 580,
-              width: "100%",
-              borderRadius: 24,
-              border: "1px solid var(--border-gold)",
-              background: "linear-gradient(135deg, rgba(20, 24, 38, 0.99) 0%, rgba(11, 13, 20, 0.99) 100%)",
-              padding: 32,
-              textAlign: "left",
-              boxShadow: "0 24px 60px rgba(0,0,0,0.7)"
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* MODAL HEADER */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setSelectedEnquiry(null)}>
+          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-gold)", borderRadius: 18, width: "100%", maxWidth: 540, padding: 26, boxShadow: "0 20px 40px rgba(0,0,0,0.6)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-subtle)", paddingBottom: 14, marginBottom: 18 }}>
               <div>
-                <div className="ff-badge ff-badge-gold" style={{ fontSize: 11, padding: "4px 10px", marginBottom: 8 }}>
-                  Advisory Enquiry Details
-                </div>
-                <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--text-main)", margin: 0, fontFamily: "var(--font-serif)" }}>
-                  {selectedEnquiry.name || "Client Enquiry"}
-                </h2>
+                <span className="ff-badge ff-badge-gold" style={{ fontSize: 10.5, marginBottom: 4 }}>Enquiry Details</span>
+                <h3 style={{ margin: "4px 0 0", fontSize: 18, fontWeight: 800, color: "var(--text-main)" }}>
+                  {selectedEnquiry.name || "Advisory Lead"}
+                </h3>
               </div>
-              <button
-                onClick={() => setSelectedEnquiry(null)}
-                style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid var(--border-subtle)",
-                  borderRadius: "50%",
-                  width: 36,
-                  height: 36,
-                  color: "var(--text-fog)",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center"
-                }}
-              >
-                <X size={18} />
-              </button>
+              <button onClick={() => setSelectedEnquiry(null)} style={{ background: "none", border: "none", color: "var(--text-fog)", fontSize: 20, cursor: "pointer" }}>✕</button>
             </div>
 
-            {/* DETAILS GRID */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14, marginBottom: 20, fontSize: 13.5 }}>
-              <div style={{ background: "rgba(255, 255, 255, 0.03)", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border-subtle)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 4 }}>Phone Number</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#FFFFFF", fontWeight: 700 }}>
-                  <Phone size={13} color="var(--accent-gold)" />
-                  <span>{formatPhoneDisplay(getPhoneRaw(selectedEnquiry))}</span>
+            {/* SUPER ADMIN VISIBILITY / ASSIGNMENT CARD */}
+            {adminRole === "superadmin" && (
+              <div style={{ background: "rgba(201, 154, 75, 0.08)", border: "1px dashed var(--border-gold)", borderRadius: 12, padding: "12px 16px", marginBottom: 18 }}>
+                <div style={{ fontSize: 11, textTransform: "uppercase", color: "var(--accent-gold)", fontWeight: 700, letterSpacing: "0.05em", marginBottom: 6 }}>
+                  Visibility & Advisor Assignment
                 </div>
-              </div>
-
-              <div style={{ background: "rgba(255, 255, 255, 0.03)", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border-subtle)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 4 }}>Email Address</div>
-                <a href={`mailto:${selectedEnquiry.email}`} style={{ color: "var(--accent-teal)", fontWeight: 600, textDecoration: "none" }}>
-                  {selectedEnquiry.email || "No email"}
-                </a>
-              </div>
-
-              <div style={{ background: "rgba(255, 255, 255, 0.03)", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border-subtle)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 4 }}>Submission Date</div>
-                <div style={{ color: "var(--text-main)", fontWeight: 600 }}>
-                  {selectedEnquiry.submittedAt
-                    ? new Date(selectedEnquiry.submittedAt).toLocaleString("en-IN", {
-                        dateStyle: "medium",
-                        timeStyle: "short"
-                      })
-                    : "Recent"}
-                </div>
-              </div>
-            </div>
-
-            {/* QUICK ACTIONS FOR ENQUIRY (WHATSAPP & CALL) */}
-            {getCleanPhoneDigits(getPhoneRaw(selectedEnquiry)) && (
-              <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-                <a
-                  href={`https://wa.me/91${getCleanPhoneDigits(getPhoneRaw(selectedEnquiry))}?text=${encodeURIComponent(`Hello ${selectedEnquiry.name || ""}, thank you for contacting Your Wealth Compass.`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    flex: 1,
-                    minWidth: 140,
-                    height: 40,
-                    background: "rgba(37, 211, 102, 0.15)",
-                    border: "1px solid #25D366",
-                    borderRadius: 10,
-                    color: "#25D366",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                    fontWeight: 700,
-                    fontSize: 13,
-                    textDecoration: "none"
-                  }}
+                <select
+                  className="ff-select"
+                  value={selectedEnquiry.assignedTo?.advisorId || ""}
+                  onChange={(e) => handleAdvisorAssign(selectedEnquiry.id || selectedEnquiry._id, e.target.value)}
+                  style={{ width: "100%" }}
+                  disabled={assigningId === (selectedEnquiry.id || selectedEnquiry._id)}
                 >
-                  <MessageCircle size={15} /> WhatsApp
-                </a>
-
-                <a
-                  href={`tel:${getCleanPhoneDigits(getPhoneRaw(selectedEnquiry))}`}
-                  style={{
-                    flex: 1,
-                    minWidth: 120,
-                    height: 40,
-                    background: "rgba(255, 255, 255, 0.08)",
-                    border: "1px solid rgba(255, 255, 255, 0.18)",
-                    borderRadius: 10,
-                    color: "#FFFFFF",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                    fontWeight: 700,
-                    fontSize: 13,
-                    textDecoration: "none"
-                  }}
-                >
-                  <Phone size={15} /> Call Client
-                </a>
+                  <option value="">⚠️ Unassigned (Hidden from Advisors)</option>
+                  <option value="all_advisors">🌐 All Advisors (Shared with entire team)</option>
+                  <option value="superadmin_only">👑 Super Admin Only (Private to me)</option>
+                  <optgroup label="Assign to Specific Advisor">
+                    {teamUsers.map((u) => (
+                      <option key={u.id || u._id} value={u.id || u._id}>
+                        👤 {u.name} ({u.designation || "Advisor"})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
               </div>
             )}
 
-            {/* TOPIC BADGE — only show for standard advisory enquiries */}
-            {(() => {
-              const modalProf = parseFormProfile(selectedEnquiry.message);
-              const isFormProfile = selectedEnquiry.topic?.startsWith("Form Profile") || Boolean(modalProf);
-              if (isFormProfile) return null;
-              return (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 6 }}>Selected Advisory Topic</div>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      padding: "6px 14px",
-                      borderRadius: 20,
-                      fontSize: 13,
-                      fontWeight: 700,
-                      background: getTopicColor(selectedEnquiry.topic).bg,
-                      color: getTopicColor(selectedEnquiry.topic).text,
-                      border: `1px solid ${getTopicColor(selectedEnquiry.topic).border}`
-                    }}
-                  >
-                    {selectedEnquiry.topic || "General Enquiry"}
-                  </span>
+            {/* Client Info Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border-subtle)" }}>
+                <div style={{ fontSize: 10.5, color: "var(--text-fog)", textTransform: "uppercase" }}>Phone Number</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-main)", marginTop: 2 }}>
+                  {formatPhoneDisplay(getPhoneRaw(selectedEnquiry))}
                 </div>
-              );
-            })()}
-
-            {/* CLIENT DATA / PROFILE DETAILS */}
-            {(() => {
-              const modalProf = parseFormProfile(selectedEnquiry.message);
-              if (modalProf) {
-                return (
-                  <div
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                      border: "1px solid var(--border-gold, rgba(201, 154, 75, 0.4))",
-                      borderRadius: 16,
-                      padding: 20,
-                      marginBottom: 24,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 12
-                    }}
-                  >
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-gold)", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 6 }}>
-                      <Sparkles size={14} /> Client Application Profile Details
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255, 255, 255, 0.06)" }}>
-                        <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 3 }}>City / Location</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#5FA8A0", fontWeight: 700, fontSize: 14 }}>
-                          <MapPin size={14} /> {modalProf.city || "—"}
-                        </div>
-                      </div>
-
-                      <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255, 255, 255, 0.06)" }}>
-                        <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 3 }}>Current Profession</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--accent-gold)", fontWeight: 700, fontSize: 14 }}>
-                          <Briefcase size={14} /> {modalProf.profession || "—"}
-                        </div>
-                      </div>
-
-                      <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255, 255, 255, 0.06)", gridColumn: "span 2" }}>
-                        <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 3 }}>Highest Education</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#A78BFA", fontWeight: 700, fontSize: 14 }}>
-                          <GraduationCap size={14} /> {modalProf.education || "—"}
-                        </div>
-                      </div>
-                    </div>
-
-                    {modalProf.remainingMessage && (
-                      <div style={{ marginTop: 6, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                        <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 4 }}>Note / Message</div>
-                        <div style={{ color: "var(--text-main)", fontSize: 13 }}>{modalProf.remainingMessage}</div>
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-
-              return (
-                <div style={{ marginBottom: 28 }}>
-                  <div style={{ fontSize: 11, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 6 }}>Client Message</div>
-                  <div
-                    style={{
-                      background: "rgba(0, 0, 0, 0.3)",
-                      border: "1px solid var(--border-subtle)",
-                      borderRadius: 14,
-                      padding: 16,
-                      color: "var(--text-main)",
-                      fontSize: 14,
-                      lineHeight: 1.6,
-                      minHeight: 100,
-                      whiteSpace: "pre-wrap"
-                    }}
-                  >
-                    {selectedEnquiry.message || "No specific message provided by client."}
-                  </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border-subtle)" }}>
+                <div style={{ fontSize: 10.5, color: "var(--text-fog)", textTransform: "uppercase" }}>Email Address</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--accent-teal)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {selectedEnquiry.email || "—"}
                 </div>
-              );
-            })()}
+              </div>
+            </div>
 
-            {/* FOOTER ACTIONS */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={(e) => handleDelete(selectedEnquiry.id, e)}
+            {/* Topic & Message */}
+            <div style={{ background: "rgba(255,255,255,0.03)", padding: "14px 16px", borderRadius: 12, border: "1px solid var(--border-subtle)", marginBottom: 18 }}>
+              <div style={{ fontSize: 10.5, color: "var(--text-fog)", textTransform: "uppercase", marginBottom: 4 }}>
+                Topic: <span style={{ color: "var(--accent-gold)", fontWeight: 700 }}>{selectedEnquiry.topic || "General"}</span>
+              </div>
+              <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--text-main)", lineHeight: 1.5 }}>
+                {selectedEnquiry.message || "No additional message provided."}
+              </p>
+            </div>
+
+            {/* WhatsApp Quick Chat */}
+            {getCleanPhoneDigits(getPhoneRaw(selectedEnquiry)) && (
+              <a
+                href={`https://wa.me/91${getCleanPhoneDigits(getPhoneRaw(selectedEnquiry))}?text=${encodeURIComponent(`Hello ${selectedEnquiry.name || ""}, thank you for contacting Your Wealth Compass.`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 style={{
-                  padding: "10px 18px",
-                  borderRadius: 12,
-                  background: "rgba(239, 68, 68, 0.12)",
-                  border: "1px solid rgba(239, 68, 68, 0.3)",
-                  color: "#EF4444",
-                  fontSize: 13.5,
-                  fontWeight: 600,
-                  cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
-                  gap: 8
+                  justifyContent: "center",
+                  gap: 8,
+                  background: "#25D366",
+                  color: "#07080C",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  textDecoration: "none"
                 }}
               >
-                <Trash2 size={16} /> Delete Enquiry
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedEnquiry(null)}
-                className="ff-btn-gold"
-                style={{ height: 44, padding: "0 24px", borderRadius: 12, fontSize: 14 }}
-              >
-                Close View
-              </button>
-            </div>
+                <MessageCircle size={15} /> Chat with Client on WhatsApp
+              </a>
+            )}
           </div>
         </div>
       )}

@@ -292,9 +292,11 @@ export function AppProvider({ children }) {
   };
 
   const saveLeadSubmission = async (leadData, currentUser = null) => {
+    const storedRef = (typeof window !== "undefined" && window.localStorage) ? (localStorage.getItem("ff_referral_code") || sessionStorage.getItem("ff_referral_code") || "") : "";
     const payload = {
       ...leadData,
-      userId: currentUser?.id || leadData.userId || ""
+      userId: currentUser?.id || leadData.userId || "",
+      referralCode: leadData.referralCode || storedRef
     };
     const res = await submitReportApi(payload);
     const rawReport = res.report || {};

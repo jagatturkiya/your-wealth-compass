@@ -207,7 +207,7 @@ body {
   justify-content: center;
   font-size: 14px;
   font-weight: 800;
-  box-shadow: 0 0 15px rgba(201, 154, 75, 0.35);
+  /* glow removed */
   cursor: pointer;
   flex-shrink: 0;
   user-select: none;
@@ -216,7 +216,7 @@ body {
 
 .ff-user-initial-dot:hover {
   transform: scale(1.05);
-  box-shadow: 0 0 20px rgba(201, 154, 75, 0.5);
+  /* glow removed */
 }
 
 .ff-hamburger-btn {
@@ -382,7 +382,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 0 40px rgba(201, 154, 75, 0.25), 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* glow removed */
   border: none;
   white-space: nowrap;
   width: auto;
@@ -397,7 +397,7 @@ body {
 
 .ff-nav-new-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 30px rgba(201, 154, 75, 0.45);
+  /* glow removed */
 }
 
 @media (max-width: 600px) {
@@ -532,17 +532,7 @@ body {
   z-index: 1;
 }
 
-.ff-hero-sunrise-glow {
-  position: absolute;
-  bottom: -150px;
-  left: 15%;
-  width: 70%;
-  height: 320px;
-  background: radial-gradient(ellipse at center, rgba(201, 154, 75, 0.20) 0%, rgba(95, 168, 160, 0.08) 45%, rgba(7, 8, 12, 0) 75%);
-  filter: blur(40px);
-  pointer-events: none;
-  z-index: 1;
-}
+.ff-hero-sunrise-glow { display: none !important; }
 
 
 
@@ -602,7 +592,7 @@ body {
 .ff-input-56px:focus {
   background: rgba(255, 255, 255, 0.07);
   border-color: var(--accent-gold);
-  box-shadow: 0 0 20px rgba(201, 154, 75, 0.25);
+  /* glow removed */
 }
 
 .ff-input-56px::placeholder {
@@ -631,7 +621,7 @@ body {
 .ff-country-select:focus {
   background: rgba(255, 255, 255, 0.07);
   border-color: var(--accent-gold);
-  box-shadow: 0 0 20px rgba(201, 154, 75, 0.25);
+  /* glow removed */
 }
 
 .ff-country-select option {
@@ -642,7 +632,7 @@ body {
 
 .ff-input-56px.has-error {
   border-color: #EF4444 !important;
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.28) !important;
+  /* glow removed */
 }
 
 .ff-field-error {
@@ -1059,7 +1049,7 @@ body {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  box-shadow: 0 0 30px rgba(201, 154, 75, 0.25);
+  /* glow removed */
   border: none;
   transition: all 0.25s ease;
 }
@@ -2229,16 +2219,7 @@ html, body, #root, .ff-app-container {
   width: 100%;
 }
 
-.ff-simulator-bg-glow {
-  position: absolute;
-  top: -80px;
-  left: 30%;
-  width: 380px;
-  height: 200px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(201, 154, 75, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
-  pointer-events: none;
-}
+.ff-simulator-bg-glow { display: none !important; }
 
 .ff-simulator-header {
   display: flex;
@@ -2757,7 +2738,7 @@ html, body, #root, .ff-app-container {
   font-size: 13px;
   font-weight: 800;
   flex-shrink: 0;
-  box-shadow: 0 0 12px rgba(201, 154, 75, 0.35);
+  /* glow removed */
 }
 
 .ff-live-toast-body {

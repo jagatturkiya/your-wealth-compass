@@ -6,6 +6,14 @@ const enquirySchema = new mongoose.Schema({
   mobile:  { type: String, default: "" },
   topic:   { type: String, default: "General Enquiry" },
   message: { type: String, default: "" },
+  referralCode: { type: String, default: "", index: true },
+  assignedTo: {
+    advisorId:          { type: String, default: null, index: true },
+    advisorName:        { type: String, default: "" },
+    advisorEmail:       { type: String, default: "" },
+    advisorDesignation: { type: String, default: "Certified Financial Advisor" },
+    assignedAt:         { type: Date, default: null }
+  }
 }, {
   timestamps: true
 });

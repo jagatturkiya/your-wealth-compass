@@ -55,6 +55,15 @@ function getAuthHeader() {
   return {};
 }
 
+export function getActiveReferralCode() {
+  try {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ff_referral_code") || sessionStorage.getItem("ff_referral_code") || "";
+    }
+  } catch (e) {}
+  return "";
+}
+
 export async function sendDualOtpApi({ email, mobile, name, type = "register" }) {
   try {
     const res = await fetch(`${API_BASE_URL}/auth/send-dual-otp`, {
@@ -217,13 +226,15 @@ export async function verifyAdminPasswordApi(password) {
 
 export async function submitReportApi(payload) {
   try {
+    const refCode = payload.referralCode || getActiveReferralCode();
+    const enriched = { ...payload, referralCode: refCode };
     return await requestWithFallback("/reports/submit", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...getAuthHeader()
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(enriched)
     });
   } catch (err) {
     console.warn("Backend API submitReport failed, fallback to local storage:", err.message);
@@ -361,6 +372,21 @@ export async function deleteAdminTeamUserApi(userId, token) {
   }
 }
 
+export async function autoAssignAllLeadsApi(token) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/admin/leads/auto-assign-all`, {
+      method: "POST",
+      headers
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("autoAssignAllLeadsApi failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 export async function assignLeadAdvisorApi(leadId, advisorData, token) {
   try {
     const headers = { "Content-Type": "application/json" };
@@ -433,10 +459,11 @@ export async function getAuditLogsApi(token) {
 
 export async function submitEnquiryApi(payload) {
   try {
+    const refCode = payload.referralCode || getActiveReferralCode();
     return await requestWithFallback("/reports/enquiry", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, referralCode: refCode })
     });
   } catch (err) {
     console.warn("Backend API submitEnquiry failed:", err.message);
@@ -468,10 +495,11 @@ export async function deleteEnquiryApi(enquiryId) {
 
 export async function submitFormResponseApi(payload) {
   try {
+    const refCode = payload.referralCode || getActiveReferralCode();
     return await requestWithFallback("/reports/form-response", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, referralCode: refCode })
     });
   } catch (err) {
     console.warn("Backend API submitFormResponse failed:", err.message);
@@ -534,3 +562,63 @@ export function getPdfDownloadUrl(reportId) {
   return `${API_BASE_URL}/reports/${reportId}/pdf`;
 }
 
+
+export async function getAssignmentRulesApi(token) {
+  try {
+    const headers = {};
+    if (token) headers["Authorization"] = "Bearer " + token;
+    const data = await requestWithFallback("/admin/rules/assignment?_t=" + Date.now(), { headers });
+    return data?.rule || { strategy: "equal_random", maxLeadsPerAdvisor: 20, autoAssignEnabled: true };
+  } catch (err) {
+    console.warn("getAssignmentRulesApi failed:", err.message);
+    return { strategy: "equal_random", maxLeadsPerAdvisor: 20, autoAssignEnabled: true };
+  }
+}
+
+export async function updateAssignmentRulesApi(rules, token) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(`${API_BASE_URL}/admin/rules/assignment`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(rules)
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("updateAssignmentRulesApi failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function assignEnquiryAdvisorApi(enquiryId, payload, token) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(`${API_BASE_URL}/admin/enquiries/${enquiryId}/assign`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("assignEnquiryAdvisorApi failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function assignFormResponseAdvisorApi(responseId, payload, token) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(`${API_BASE_URL}/admin/form-responses/${responseId}/assign`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("assignFormResponseAdvisorApi failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}

@@ -5,6 +5,7 @@ const Lead = require("../models/Lead");
 const Enquiry = require("../models/Enquiry");
 const AuditLog = require("../models/AuditLog");
 const FormResponse = require("../models/FormResponse");
+const AssignmentRule = require("../models/AssignmentRule");
 
 const router = express.Router();
 
@@ -31,22 +32,132 @@ function getUserFromAuth(req) {
   }
 }
 
+// Helper: Resolve advisor assignment (Direct Referral Credit OR Auto Distribution via Configured Rules)
+async function resolveAdvisorAssignment(referralCode) {
+  let assignedData = { advisorId: null, advisorName: "", advisorEmail: "", advisorDesignation: "Certified Financial Advisor", assignedAt: null };
+  let sourceAdvisor = { advisorId: "", advisorName: "", advisorDesignation: "Certified Financial Advisor", referralCode: "" };
+
+  const cleanRef = (referralCode || "").trim().toLowerCase();
+
+  // 1. If referral code is provided, try to match advisor directly
+  if (cleanRef) {
+    try {
+      const matchedAdvisor = await User.findOne({
+        role: "advisor",
+        status: "active",
+        $or: [
+          { referralCode: cleanRef },
+          { username: cleanRef },
+          { email: cleanRef },
+          { name: new RegExp("^" + cleanRef + "$", "i") }
+        ]
+      }).lean();
+
+      if (matchedAdvisor) {
+        const designation = matchedAdvisor.designation || "Certified Financial Advisor";
+        assignedData = {
+          advisorId: matchedAdvisor._id.toString(),
+          advisorName: matchedAdvisor.name,
+          advisorEmail: matchedAdvisor.email,
+          advisorDesignation: designation,
+          assignedAt: new Date()
+        };
+        sourceAdvisor = {
+          advisorId: matchedAdvisor._id.toString(),
+          advisorName: matchedAdvisor.name,
+          advisorDesignation: designation,
+          referralCode: matchedAdvisor.referralCode || matchedAdvisor.username || cleanRef
+        };
+        return { assignedData, sourceAdvisor, refCode: cleanRef };
+      }
+    } catch (refErr) {
+      console.warn("Referral advisor lookup error:", refErr.message);
+    }
+  }
+
+  // 2. If no referral code or referral code didn't match:
+  // Apply Super Admin's configured assignment rules
+  try {
+    let rule = await AssignmentRule.findOne({ key: "lead_distribution_rule" }).lean().catch(() => null);
+    if (!rule) {
+      rule = { strategy: "equal_random", maxLeadsPerAdvisor: 20, autoAssignEnabled: true };
+    }
+
+    // If auto-assign is turned off by Super Admin, keep lead strictly unassigned
+    if (rule.autoAssignEnabled === false) {
+      return { assignedData, sourceAdvisor, refCode: cleanRef };
+    }
+
+    const activeAdvisors = await User.find({ role: "advisor", status: "active" }).lean();
+    if (activeAdvisors && activeAdvisors.length > 0) {
+      let chosen = null;
+
+      if (rule.strategy === "performance") {
+        // Priority to advisors with most closed clients (conversionsCount)
+        const sorted = [...activeAdvisors].sort((a, b) => {
+          const diff = (b.conversionsCount || 0) - (a.conversionsCount || 0);
+          if (diff !== 0) return diff;
+          return (a.assignedLeadsCount || 0) - (b.assignedLeadsCount || 0);
+        });
+        chosen = sorted[0];
+      } else if (rule.strategy === "capacity_cap") {
+        // Only assign to advisors under the maxLeadsPerAdvisor threshold
+        const maxCap = Number(rule.maxLeadsPerAdvisor) || 20;
+        const eligible = activeAdvisors.filter(a => (a.assignedLeadsCount || 0) < maxCap);
+        if (eligible.length > 0) {
+          eligible.sort((a, b) => (a.assignedLeadsCount || 0) - (b.assignedLeadsCount || 0));
+          chosen = eligible[0];
+        } else {
+          // If all at cap, fallback to the one with lowest active leads
+          const sorted = [...activeAdvisors].sort((a, b) => (a.assignedLeadsCount || 0) - (b.assignedLeadsCount || 0));
+          chosen = sorted[0];
+        }
+      } else {
+        // Equal / Random round-robin by lowest current workload
+        const sorted = [...activeAdvisors].sort((a, b) => (a.assignedLeadsCount || 0) - (b.assignedLeadsCount || 0));
+        chosen = sorted[0];
+      }
+
+      if (chosen) {
+        const designation = chosen.designation || "Certified Financial Advisor";
+        assignedData = {
+          advisorId: chosen._id.toString(),
+          advisorName: chosen.name,
+          advisorEmail: chosen.email,
+          advisorDesignation: designation,
+          assignedAt: new Date()
+        };
+        sourceAdvisor = {
+          advisorId: chosen._id.toString(),
+          advisorName: chosen.name,
+          advisorDesignation: designation,
+          referralCode: chosen.referralCode || chosen.username || ""
+        };
+      }
+    }
+  } catch (randErr) {
+    console.warn("Advisor rule assignment error:", randErr.message);
+  }
+
+  return { assignedData, sourceAdvisor, refCode: cleanRef };
+}
+
 // POST /api/v1/reports/submit — save form submission
 router.post("/submit", async (req, res) => {
   try {
-    const data = req.body;
     const authUser = getUserFromAuth(req);
-    const resolvedUserId = data.userId || (authUser ? authUser.id : "");
+    const data = req.body || {};
 
-    const termIns = data.termInsurance || (data.protection?.termInsurance ? "yes" : "no");
-    const termAmt = String(data.termAmount || data.protection?.termAmount || "0");
-    const healthIns = data.healthInsurance || (data.protection?.healthInsurance ? "yes" : "no");
-    const healthAmt = String(data.healthAmount || data.protection?.healthAmount || "0");
+    const resolvedUserId = (authUser && authUser.id) ? authUser.id : (data.userId || "");
     const cityVal = data.city || data.protection?.city || "";
     const retAgeVal = String(data.retirementAge || data.protection?.retirementAge || "60");
+    const termIns = data.termInsurance !== undefined ? data.termInsurance : (data.protection?.termInsurance ? "yes" : "no");
+    const termAmt = String(data.termAmount || data.protection?.termAmount || "0");
+    const healthIns = data.healthInsurance !== undefined ? data.healthInsurance : (data.protection?.healthInsurance ? "yes" : "no");
+    const healthAmt = String(data.healthAmount || data.protection?.healthAmount || "0");
 
     let leadObj = {
-      _id: "lead_" + Date.now(),
+      _id:             "lead_" + Date.now(),
       userId:          resolvedUserId,
       name:            data.name || "Client User",
       email:           data.email || "",
@@ -78,29 +189,9 @@ router.post("/submit", async (req, res) => {
       updatedAt:       new Date().toISOString(),
     };
 
-    // Auto-assignment logic (Round-robin / least-loaded active advisor)
-    let assignedData = { advisorId: null, advisorName: "", advisorEmail: "", assignedAt: null };
-    try {
-      const activeAdvisors = await User.find({ role: "advisor", status: "active" }).lean();
-      if (activeAdvisors && activeAdvisors.length > 0) {
-        const advisorsWithCounts = await Promise.all(
-          activeAdvisors.map(async (adv) => {
-            const count = await Lead.countDocuments({ "assignedTo.advisorId": adv._id.toString() });
-            return { advisor: adv, count };
-          })
-        );
-        advisorsWithCounts.sort((a, b) => a.count - b.count);
-        const chosen = advisorsWithCounts[0].advisor;
-        assignedData = {
-          advisorId: chosen._id.toString(),
-          advisorName: chosen.name,
-          advisorEmail: chosen.email,
-          assignedAt: new Date()
-        };
-      }
-    } catch (assignErr) {
-      console.warn("Auto-assignment logic skipped:", assignErr.message);
-    }
+    // Resolve assignment: Referral credit or Random distribution
+    const rawRefCode = data.referralCode || req.query.ref || req.body.ref || "";
+    const { assignedData, sourceAdvisor, refCode } = await resolveAdvisorAssignment(rawRefCode);
 
     try {
       const created = await Lead.create({
@@ -124,17 +215,23 @@ router.post("/submit", async (req, res) => {
         emergencyGap:    leadObj.emergencyGap,
         scores:          leadObj.scores,
         protection:      leadObj.protection,
+        referralCode:    refCode,
+        sourceAdvisor:   sourceAdvisor,
         assignedTo:      assignedData,
         leadStatus:      "new",
         advisorNotes:    []
       });
       leadObj = { ...created.toObject(), _id: created._id, id: created._id };
 
+      if (assignedData.advisorId) {
+        await User.findByIdAndUpdate(assignedData.advisorId, { $inc: { assignedLeadsCount: 1 } }).catch(() => {});
+      }
+
       await AuditLog.create({
         type: "Lead Submission",
         user: data.email || data.mobile || (authUser ? authUser.email : "Anonymous"),
         status: "Success",
-        details: `Assessment submitted: ${data.name || "Client User"} (Score: ${leadObj.healthScore}/100)${assignedData.advisorName ? ` [Auto-assigned to ${assignedData.advisorName}]` : " [Unassigned]"}`
+        details: `Assessment submitted: ${data.name || "Client User"} (Score: ${leadObj.healthScore}/100)${assignedData.advisorName ? ` [Assigned to ${assignedData.advisorName}${refCode ? ` via referral "${refCode}"` : " (Auto-assigned)"}]` : " [Unassigned]"}`
       }).catch(() => {});
     } catch (dbErr) {
       console.error("MongoDB Save Error:", dbErr.message);
@@ -271,7 +368,10 @@ router.delete("/:id", async (req, res) => {
 // POST /api/v1/reports/enquiry — save contact/advisory enquiry
 router.post("/enquiry", async (req, res) => {
   try {
-    const { name, email, mobile, topic, message } = req.body;
+    const { name, email, mobile, topic, message, referralCode } = req.body;
+    const rawRefCode = referralCode || req.query.ref || "";
+    const { assignedData, refCode } = await resolveAdvisorAssignment(rawRefCode);
+
     let enqObj = {
       _id: "enq_" + Date.now(),
       name: name || "Advisory Client",
@@ -279,6 +379,8 @@ router.post("/enquiry", async (req, res) => {
       mobile: mobile || "",
       topic: topic || "General Wealth Advisory",
       message: message || "",
+      referralCode: refCode,
+      assignedTo: assignedData,
       createdAt: new Date().toISOString()
     };
 
@@ -288,7 +390,9 @@ router.post("/enquiry", async (req, res) => {
         email: email || "",
         mobile: mobile || "",
         topic: topic || "General Wealth Advisory",
-        message: message || ""
+        message: message || "",
+        referralCode: refCode,
+        assignedTo: assignedData
       });
       enqObj = { ...created.toObject(), _id: created._id, id: created._id };
 
@@ -296,7 +400,7 @@ router.post("/enquiry", async (req, res) => {
         type: "Advisory Enquiry",
         user: email || mobile || name || "Anonymous",
         status: "Success",
-        details: `Contact enquiry from ${name || "Client"}: ${topic || "Advisory"} (Mobile: ${mobile || "N/A"})`
+        details: `Contact enquiry from ${name || "Client"}: ${topic || "Advisory"}${assignedData.advisorName ? ` [Assigned to ${assignedData.advisorName}]` : ""}`
       }).catch(() => {});
     } catch (dbErr) {
       console.error("MongoDB Enquiry Save Error:", dbErr.message);
@@ -316,7 +420,7 @@ router.post("/enquiry", async (req, res) => {
 // POST /api/v1/reports/form-response — save /forms profile application
 router.post("/form-response", async (req, res) => {
   try {
-    const { name, email, mobile, city, education, profession, notes } = req.body;
+    const { name, email, mobile, city, education, profession, notes, referralCode } = req.body;
 
     if (!name && !mobile && !email) {
       return res.status(400).json({ success: false, error: "Name and Mobile/Email are required" });
@@ -329,6 +433,9 @@ router.post("/form-response", async (req, res) => {
     const cleanCity = (city || "").trim();
     const cleanEdu = (education || "").trim();
     const cleanProf = (profession || "").trim();
+
+    const rawRefCode = referralCode || req.query.ref || "";
+    const { assignedData, sourceAdvisor, refCode } = await resolveAdvisorAssignment(rawRefCode);
 
     let createdResponse = null;
     let createdLead = null;
@@ -343,6 +450,8 @@ router.post("/form-response", async (req, res) => {
         profession: cleanProf,
         status: "new",
         source: "Forms Portal (/forms)",
+        referralCode: refCode,
+        assignedTo: assignedData,
         notes: notes ? [{ text: notes, author: "System" }] : []
       });
 
@@ -353,6 +462,9 @@ router.post("/form-response", async (req, res) => {
         mobile: cleanMobile,
         city: cleanCity,
         leadStatus: "new",
+        referralCode: refCode,
+        sourceAdvisor: sourceAdvisor,
+        assignedTo: assignedData,
         goals: [cleanProf, cleanEdu].filter(Boolean),
         advisorNotes: [
           {
@@ -368,7 +480,7 @@ router.post("/form-response", async (req, res) => {
         type: "Form Response",
         user: cleanEmail || cleanMobile || cleanName,
         status: "Success",
-        details: `Form response from ${cleanName}: ${cleanProf} (${cleanCity}) - Mobile: ${cleanMobile}`
+        details: `Form response from ${cleanName}: ${cleanProf} (${cleanCity})${assignedData.advisorName ? ` [Assigned to ${assignedData.advisorName}]` : ""}`
       }).catch(() => {});
 
       // Asynchronously forward to Google Form endpoint

@@ -177,7 +177,7 @@ export default function LandingHero({ onStart, onStartWizard, onOpenLegal, onOpe
               borderRadius: 10,
               cursor: "pointer",
               marginBottom: 50,
-              boxShadow: "0 0 50px rgba(201, 154, 75, 0.2), 0 16px 36px rgba(0, 0, 0, 0.4)",
+              
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
@@ -198,7 +198,7 @@ export default function LandingHero({ onStart, onStartWizard, onOpenLegal, onOpe
                 right: "6%",
                 height: 2,
                 background: "linear-gradient(90deg, rgba(255,255,255,0.15) 0%, rgba(201,154,75,0.4) 70%, var(--accent-gold) 100%)",
-                boxShadow: "0 0 12px rgba(201, 154, 75, 0.4)",
+                
                 zIndex: 1
               }}
             />

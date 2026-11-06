@@ -5,7 +5,8 @@ import {
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { computeReport, INR, INR_L } from "../../utils/financialEngine";
-import { assignLeadAdvisorApi, updateLeadStatusAndNotesApi } from "../../services/api";
+import { assignLeadAdvisorApi, updateLeadStatusAndNotesApi, autoAssignAllLeadsApi, getAssignmentRulesApi, updateAssignmentRulesApi } from "../../services/api";
+import { Sliders, Settings2 } from "lucide-react";
 
 const STAGE_CONFIGS = {
   new: { label: "● New", color: "var(--accent-teal)", bg: "rgba(95, 168, 160, 0.15)", border: "rgba(95, 168, 160, 0.3)" },
@@ -33,8 +34,61 @@ export default function LeadTable({
   const [cityFilter, setCityFilter] = useState("all");
   const [sortOption, setSortOption] = useState("newest");
   const [actionNotice, setActionNotice] = useState("");
+  const [isAssigningAll, setIsAssigningAll] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [assignRules, setAssignRules] = useState({
+    strategy: "equal_random",
+    maxLeadsPerAdvisor: 20,
+    autoAssignEnabled: true
+  });
+  const [isSavingRules, setIsSavingRules] = useState(false);
+  const [rulesSaveNotice, setRulesSaveNotice] = useState("");
+
+  React.useEffect(() => {
+    if (adminRole === "superadmin" && adminToken) {
+      getAssignmentRulesApi(adminToken).then((rule) => {
+        if (rule) setAssignRules(rule);
+      }).catch(() => {});
+    }
+  }, [adminRole, adminToken]);
+
+  const handleSaveRules = async () => {
+    try {
+      setIsSavingRules(true);
+      const res = await updateAssignmentRulesApi(assignRules, adminToken);
+      if (res?.success) {
+        setRulesSaveNotice("✓ Assigning rules updated successfully!");
+        setActionNotice("⚡ Lead distribution rules updated!");
+        setTimeout(() => setRulesSaveNotice(""), 3500);
+        setTimeout(() => setActionNotice(""), 4000);
+      } else {
+        alert("Failed to save rules: " + (res?.error || "Unknown error"));
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      setIsSavingRules(false);
+    }
+  };
 
   const safeLeads = Array.isArray(leads) ? leads : [];
+  const unassignedCount = safeLeads.filter(
+    (l) => !l.assignedTo || !l.assignedTo.advisorId
+  ).length;
+
+  const handleAutoAssignAll = async () => {
+    try {
+      setIsAssigningAll(true);
+      const res = await autoAssignAllLeadsApi(adminToken);
+      setActionNotice(`⚡ ${res?.message || "Leads successfully distributed!"}`);
+      onRefresh();
+      setTimeout(() => setActionNotice(""), 4500);
+    } catch (err) {
+      alert("Failed to auto-assign: " + (err?.message || "Unknown error"));
+    } finally {
+      setIsAssigningAll(false);
+    }
+  };
   const cities = Array.from(new Set(safeLeads.map((l) => l && l.city).filter(Boolean)));
 
   const formatPhoneDisplay = (raw) => {
@@ -265,12 +319,63 @@ export default function LeadTable({
           </select>
         </div>
 
-        <button
-          className="ff-btn-secondary ff-crm-export-btn"
-          onClick={exportCSV}
-        >
-          <Download size={13} /> Export CSV
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {adminRole === "superadmin" && unassignedCount > 0 && (
+            <button
+              className="ff-btn-secondary"
+              onClick={handleAutoAssignAll}
+              disabled={isAssigningAll}
+              style={{
+                background: "rgba(201, 154, 75, 0.16)",
+                border: "1px solid var(--border-gold)",
+                color: "var(--accent-gold)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 9,
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: isAssigningAll ? "wait" : "pointer",
+                transition: "all 0.2s ease"
+              }}
+              title="Automatically distribute unassigned leads randomly among active advisors"
+            >
+              <Sparkles size={13} /> {isAssigningAll ? "Distributing..." : `Auto-Assign (${unassignedCount})`}
+            </button>
+          )}
+
+          {adminRole === "superadmin" && (
+            <button
+              className="ff-btn-secondary"
+              onClick={() => setShowRulesModal(true)}
+              style={{
+                background: "rgba(255, 255, 255, 0.05)",
+                border: "1px solid var(--border-subtle)",
+                color: "var(--text-main)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 9,
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
+              title="Configure lead assigning rules"
+            >
+              <Sliders size={13} color="var(--accent-gold)" /> Assigning Rules
+            </button>
+          )}
+
+          <button
+            className="ff-btn-secondary ff-crm-export-btn"
+            onClick={exportCSV}
+          >
+            <Download size={13} /> Export CSV
+          </button>
+        </div>
       </div>
 
       {/* 1. DESKTOP CLIENT TABLE */}
@@ -642,6 +747,152 @@ export default function LeadTable({
           })
         )}
       </div>
+      {/* LEAD ASSIGNING RULES CONFIGURATION MODAL */}
+      {showRulesModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-gold)", borderRadius: 16, width: "100%", maxWidth: 540, padding: 24, boxShadow: "0 20px 40px rgba(0,0,0,0.6)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-subtle)", paddingBottom: 14, marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(201,154,75,0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent-gold)" }}>
+                  <Sliders size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--text-main)" }}>Assigning Rules & Distribution</h3>
+                  <div style={{ fontSize: 11.5, color: "var(--text-fog)", marginTop: 2 }}>Super Admin Policy for Incoming Leads</div>
+                </div>
+              </div>
+              <button onClick={() => setShowRulesModal(false)} style={{ background: "none", border: "none", color: "var(--text-fog)", fontSize: 18, cursor: "pointer" }}>✕</button>
+            </div>
+
+            {rulesSaveNotice && (
+              <div style={{ background: "rgba(16, 185, 129, 0.15)", border: "1px solid rgba(16, 185, 129, 0.4)", color: "#34D399", padding: "10px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, marginBottom: 16 }}>
+                {rulesSaveNotice}
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Distribution Strategy Selector */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-main)", display: "block", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Distribution Strategy
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, background: assignRules.strategy === "equal_random" ? "rgba(201,154,75,0.12)" : "rgba(255,255,255,0.03)", border: assignRules.strategy === "equal_random" ? "1px solid var(--border-gold)" : "1px solid var(--border-subtle)", padding: "10px 14px", borderRadius: 10, cursor: "pointer" }}>
+                    <input
+                      type="radio"
+                      name="strategy"
+                      checked={assignRules.strategy === "equal_random"}
+                      onChange={() => setAssignRules({ ...assignRules, strategy: "equal_random" })}
+                      style={{ marginTop: 3 }}
+                    />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-main)" }}>Equal Distribution (Random / Round-Robin)</div>
+                      <div style={{ fontSize: 11.5, color: "var(--text-fog)", marginTop: 2 }}>Evenly spreads leads across all active advisors based on lowest workload.</div>
+                    </div>
+                  </label>
+
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, background: assignRules.strategy === "performance" ? "rgba(201,154,75,0.12)" : "rgba(255,255,255,0.03)", border: assignRules.strategy === "performance" ? "1px solid var(--border-gold)" : "1px solid var(--border-subtle)", padding: "10px 14px", borderRadius: 10, cursor: "pointer" }}>
+                    <input
+                      type="radio"
+                      name="strategy"
+                      checked={assignRules.strategy === "performance"}
+                      onChange={() => setAssignRules({ ...assignRules, strategy: "performance" })}
+                      style={{ marginTop: 3 }}
+                    />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-main)" }}>Performance Priority (Most Closed Clients)</div>
+                      <div style={{ fontSize: 11.5, color: "var(--text-fog)", marginTop: 2 }}>Gives organic leads first to advisors who have successfully converted the most clients.</div>
+                    </div>
+                  </label>
+
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, background: assignRules.strategy === "capacity_cap" ? "rgba(201,154,75,0.12)" : "rgba(255,255,255,0.03)", border: assignRules.strategy === "capacity_cap" ? "1px solid var(--border-gold)" : "1px solid var(--border-subtle)", padding: "10px 14px", borderRadius: 10, cursor: "pointer" }}>
+                    <input
+                      type="radio"
+                      name="strategy"
+                      checked={assignRules.strategy === "capacity_cap"}
+                      onChange={() => setAssignRules({ ...assignRules, strategy: "capacity_cap" })}
+                      style={{ marginTop: 3 }}
+                    />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-main)" }}>Maximum Capacity Cap</div>
+                      <div style={{ fontSize: 11.5, color: "var(--text-fog)", marginTop: 2 }}>Caps active leads per advisor. Once an advisor hits the cap, new leads route to others.</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Cap Input if Capacity Cap chosen */}
+              {assignRules.strategy === "capacity_cap" && (
+                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "12px 14px" }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-fog)", display: "block", marginBottom: 6 }}>
+                    Max Active Leads Per Advisor
+                  </label>
+                  <input
+                    type="number"
+                    className="ff-input"
+                    min="1"
+                    max="500"
+                    value={assignRules.maxLeadsPerAdvisor || 20}
+                    onChange={(e) => setAssignRules({ ...assignRules, maxLeadsPerAdvisor: parseInt(e.target.value) || 20 })}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              )}
+
+              {/* Auto Assign Toggle */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "12px 14px" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-main)" }}>Automatic Lead Assignment</div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-fog)", marginTop: 2 }}>If disabled, incoming organic leads remain unassigned until manually distributed.</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={assignRules.autoAssignEnabled}
+                  onChange={(e) => setAssignRules({ ...assignRules, autoAssignEnabled: e.target.checked })}
+                  style={{ width: 18, height: 18, cursor: "pointer" }}
+                />
+              </div>
+
+              {/* Referral Guarantee Note */}
+              <div style={{ fontSize: 11.5, color: "var(--accent-gold)", background: "rgba(201,154,75,0.08)", border: "1px dashed var(--border-gold)", borderRadius: 10, padding: "10px 14px" }}>
+                💡 <b>Direct Referral Rule:</b> Any assessment submitted with an advisor's unique referral link always bypasses these rules and assigns 100% directly to that advisor.
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, paddingTop: 14, borderTop: "1px solid var(--border-subtle)" }}>
+              <button
+                className="ff-btn-secondary"
+                onClick={() => {
+                  handleAutoAssignAll();
+                }}
+                disabled={isAssigningAll}
+                style={{ fontSize: 12, padding: "8px 14px" }}
+              >
+                <Sparkles size={13} /> Run Auto-Assign Now
+              </button>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  className="ff-btn-ghost"
+                  onClick={() => setShowRulesModal(false)}
+                  style={{ fontSize: 12, padding: "8px 14px" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="ff-btn-gold"
+                  onClick={handleSaveRules}
+                  disabled={isSavingRules}
+                  style={{ fontSize: 12.5, fontWeight: 700, padding: "8px 18px" }}
+                >
+                  {isSavingRules ? "Saving..." : "Save Policy"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

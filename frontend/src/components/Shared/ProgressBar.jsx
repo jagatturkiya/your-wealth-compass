@@ -48,7 +48,7 @@ export default function ProgressBar({ currentStep }) {
               {isCompleted ? (
                 <Check size={14} strokeWidth={2.5} />
               ) : isActive ? (
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-gold)", display: "inline-block", boxShadow: "0 0 8px rgba(201, 154, 75, 0.8)" }} />
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-gold)", display: "inline-block",  }} />
               ) : (
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--text-fog)", opacity: 0.4, display: "inline-block" }} />
               )}
@@ -65,7 +65,7 @@ export default function ProgressBar({ currentStep }) {
             height: "100%",
             width: `${percentage}%`,
             background: "linear-gradient(90deg, #C9962F 0%, #E5BD6B 50%, #5FA8A0 100%)",
-            boxShadow: "0 0 16px rgba(201, 154, 75, 0.5)",
+            
             borderRadius: 10,
             transition: "width 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
           }}

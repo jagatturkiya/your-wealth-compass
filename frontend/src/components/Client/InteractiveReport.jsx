@@ -25,7 +25,7 @@ function CircleGauge({ value, label, color, size = 80, stroke = 7 }) {
         <svg width={size} height={size} style={{ transform: "rotate(-90deg)", position: "absolute", top: 0, left: 0 }}>
           <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255, 255, 255, 0.08)" strokeWidth={stroke} fill="none" />
           <circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={stroke} fill="none"
-            strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.8s ease-in-out", filter: `drop-shadow(0 0 6px ${color})` }} />
+            strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.8s ease-in-out",  }} />
         </svg>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 19, color: "#FFFFFF", fontWeight: 800, zIndex: 2, textAlign: "center" }}>
           {clamp(value)}
@@ -59,6 +59,16 @@ export default function InteractiveReport({ lead, audience = "client", onOpenPdf
   const genDate = new Date(lead.updatedAt || lead.submittedAt || Date.now()).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
 
   const hasData = Number(lead.income) > 0 || Number(lead.expenses) > 0 || Number(lead.savings) > 0 || (Array.isArray(lead.goals) && lead.goals.length > 0);
+
+  // Authorship: ONLY referral source advisor gets credited. If no referral, default strictly to Jagat Turkiya, Certified Financial Planner.
+  const hasReferralSource = Boolean(lead.sourceAdvisor?.advisorName && lead.sourceAdvisor.advisorName.trim());
+  const activeAdvisorName = hasReferralSource
+    ? lead.sourceAdvisor.advisorName.trim()
+    : "Jagat Turkiya";
+
+  const activeAdvisorDesignation = hasReferralSource
+    ? (lead.sourceAdvisor.advisorDesignation || "Certified Financial Advisor")
+    : "Certified Financial Planner";
 
   // Priority recommendations logic
   const highPriority = [];
@@ -239,7 +249,7 @@ export default function InteractiveReport({ lead, audience = "client", onOpenPdf
             <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(201, 154, 75, 0.12)", border: "1px solid rgba(201, 154, 75, 0.35)", borderRadius: 10, padding: "6px 14px" }}>
               <Award size={15} color="var(--accent-gold)" />
               <div style={{ fontSize: 12.5, color: "#E2E8F0" }}>
-                Prepared by <b style={{ color: "var(--accent-gold)" }}>Jagat Turkiya, CFP</b> <span style={{ color: "var(--text-fog)" }}>(Certified Financial Planner)</span>
+                Prepared by <b style={{ color: "var(--accent-gold)" }}>{activeAdvisorName}</b> <span style={{ color: "var(--text-fog)" }}>({activeAdvisorDesignation})</span>
               </div>
             </div>
           </div>
@@ -716,7 +726,7 @@ export default function InteractiveReport({ lead, audience = "client", onOpenPdf
               alignItems: "center",
               justifyContent: "center",
               color: "var(--accent-gold)",
-              boxShadow: "0 0 16px rgba(201, 154, 75, 0.25)",
+              
               flexShrink: 0
             }}
           >
@@ -727,17 +737,17 @@ export default function InteractiveReport({ lead, audience = "client", onOpenPdf
               FIDUCIARY FINANCIAL ARCHITECTURE
             </div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.01em" }}>
-              Prepared by <span style={{ color: "var(--accent-gold)" }}>Jagat Turkiya, CFP</span>
+              Prepared by <span style={{ color: "var(--accent-gold)" }}>{activeAdvisorName}</span>
             </div>
             <div style={{ fontSize: 13, color: "#94A3B8", fontWeight: 600, marginTop: 2 }}>
-              Certified Financial Planner
+              {activeAdvisorDesignation}
             </div>
           </div>
         </div>
 
         <div style={{ textAlign: "right" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.3)", padding: "6px 14px", borderRadius: 20, color: "#34D399", fontSize: 12, fontWeight: 700 }}>
-            <CheckCircle2 size={14} /> Verified CFP Diagnostic
+            <CheckCircle2 size={14} /> Verified Advisory Diagnostic
           </div>
           <div style={{ fontSize: 11, color: "var(--text-fog)", marginTop: 6 }}>
             Report Ref: {lead._id || lead.id || "YWC-2026"} &bull; {genDate}

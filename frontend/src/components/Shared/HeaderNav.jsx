@@ -80,7 +80,7 @@ export default function HeaderNav({ activeTab, setActiveTab, onResetWizard, onOp
               color: "#07080C",
               border: "none",
               cursor: "pointer",
-              boxShadow: "0 0 20px rgba(201, 154, 75, 0.28)",
+              
               whiteSpace: "nowrap"
             }}
           >

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
   Users, AlertTriangle, FileCheck2, Clock, Filter, Lock, ShieldCheck,
-  LogOut, ArrowRight, KeyRound, Mail, RefreshCw, UserCheck, Shield, Sparkles, User, CheckCircle2, FileSpreadsheet
+  LogOut, ArrowRight, KeyRound, Mail, RefreshCw, UserCheck, Shield, Sparkles, User, CheckCircle2, FileSpreadsheet,
+  Share2, Copy
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
@@ -52,11 +53,10 @@ class AdminErrorBoundary extends React.Component {
   }
 }
 
-function AdminPortalMain() {
-  const { setPortalMode } = useAuth();
-  const { contactEnquiries = [], formResponses = [], refreshBackendData, leads: appLeads = [] } = useApp();
+export default function AdminPortal({ onBackToClient }) {
+  const { leads: appLeads, contactEnquiries, formResponses, refreshBackendData, setPortalMode } = useApp();
+  const { user: currentAuthUser } = useAuth();
 
-  // Authentication State
   const [adminUser, setAdminUser] = useState(() => {
     try {
       const saved = sessionStorage.getItem("ff_admin_session");
@@ -79,8 +79,23 @@ function AdminPortalMain() {
   const [authError, setAuthError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [copiedMyLink, setCopiedMyLink] = useState(false);
 
-  const [activeTab, setActiveTab] = useState("crm"); // 'crm' | 'team' | 'enquiries' | 'logs'
+  const isSuperAdmin = adminUser?.role === "superadmin" || adminUser?.id === "superadmin_master";
+  const isAdvisorCreator = adminUser?.role === "advisor_creator" || adminUser?.role === "creator";
+  const isAdvisor = adminUser?.role === "advisor";
+  const isItManager = adminUser?.role === "it_manager";
+  const canManageTeam = isSuperAdmin || isAdvisorCreator || isItManager;
+
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("ff_admin_session");
+      const user = saved ? JSON.parse(saved) : null;
+      if (user?.role === "advisor_creator" || user?.role === "creator") return "team";
+    } catch (e) {}
+    return "crm";
+  });
+
   const [selectedLead, setSelectedLead] = useState(null);
 
   // Dynamic Data Lists — initialized from cache so never zero on first render
@@ -94,31 +109,39 @@ function AdminPortalMain() {
   });
   const [teamUsers, setTeamUsers] = useState([]);
 
-  const isSuperAdmin = adminUser?.role === "superadmin" || adminUser?.id === "superadmin_master";
+  const advisorRefCode = adminUser?.referralCode || adminUser?.username || (adminUser?.name ? adminUser.name.toLowerCase().replace(/[^a-z0-9]/g, "") : "");
+  const advisorRefUrl = `https://www.yourwealthcompass.in/?ref=${advisorRefCode}`;
+
+  const handleCopyMyRefLink = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(advisorRefUrl);
+      setCopiedMyLink(true);
+      setTimeout(() => setCopiedMyLink(false), 2000);
+    }
+  };
 
   const loadPortalData = async (token = adminToken, retryCount = 0) => {
     setIsRefreshing(true);
     try {
-      // 1. Fetch leads (role-filtered by backend)
-      const fetchedLeads = await getLeadsApi(token);
+      // 1. Fetch leads (only if not advisor creator)
+      if (!isAdvisorCreator) {
+        const fetchedLeads = await getLeadsApi(token);
 
-      // Auto-retry once if server was sleeping
-      if (!fetchedLeads && retryCount < 2) {
-        await new Promise((r) => setTimeout(r, 2500));
-        return loadPortalData(token, retryCount + 1);
+        if (!fetchedLeads && retryCount < 2) {
+          await new Promise((r) => setTimeout(r, 2000));
+          return loadPortalData(token, retryCount + 1);
+        }
+
+        if (Array.isArray(fetchedLeads)) {
+          setAdminLeads(fetchedLeads);
+          try {
+            localStorage.setItem("ff_leads_db", JSON.stringify(fetchedLeads));
+          } catch (e) {}
+        }
       }
 
-      if (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) {
-        setAdminLeads(fetchedLeads);
-        try {
-          localStorage.setItem("ff_leads_db", JSON.stringify(fetchedLeads));
-        } catch (e) {}
-      } else if (Array.isArray(fetchedLeads)) {
-        setAdminLeads(fetchedLeads);
-      }
-
-      // 2. Fetch team members (if superadmin)
-      if (isSuperAdmin || !adminUser || adminUser?.role === "superadmin") {
+      // 2. Fetch team members (if superadmin, advisor creator, or it manager)
+      if (canManageTeam) {
         const teamRes = await fetchAdminTeamUsersApi(token);
         if (teamRes && teamRes.users) setTeamUsers(teamRes.users);
       }
@@ -135,68 +158,50 @@ function AdminPortalMain() {
 
   useEffect(() => {
     if (adminToken || adminUser) {
+      if (isAdvisorCreator) {
+        setActiveTab("team");
+      }
       loadPortalData(adminToken);
     }
-  }, [adminToken, adminUser?.id]);
+  }, [adminToken, adminUser?.id, adminUser?.role]);
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    const trimmedPass = (passwordInput || "").trim();
+    setAuthError("");
+
+    const cleanUser = identifierInput.trim();
+    const trimmedPass = passwordInput.trim();
+
     if (!trimmedPass) {
       setAuthError("Please enter your password.");
       return;
     }
 
-    const cleanUser = (identifierInput || "").trim();
-
-    // 1. Super Admin Master Key — Immediate Access (No username required!)
-    if (trimmedPass === "work2026@") {
-      setIsVerifying(true);
-      setAuthError("");
-      try {
-        const res = await adminLoginApi(cleanUser || "admin", trimmedPass);
-        const userObj = res.user || { id: "superadmin_master", name: cleanUser || "Super Administrator", role: "superadmin" };
-        const tok = res.token || "mock_token";
-        setAdminUser(userObj);
-        setAdminToken(tok);
-        sessionStorage.setItem("ff_admin_session", JSON.stringify(userObj));
-        sessionStorage.setItem("ff_admin_token", tok);
-        setIdentifierInput("");
-        setPasswordInput("");
-        loadPortalData(tok);
-      } catch (err) {
-        setAuthError("Authentication error. Please check server connection.");
-      } finally {
-        setIsVerifying(false);
-      }
-      return;
-    }
-
-    // 2. Advisor Login — Requires both Username and Password
-    if (!cleanUser) {
-      setAuthError("Please enter your username.");
-      return;
-    }
-
     setIsVerifying(true);
-    setAuthError("");
     try {
       const res = await adminLoginApi(cleanUser, trimmedPass);
-      if (res && res.success) {
-        const userObj = res.user || { id: "advisor_user", name: cleanUser, role: "advisor" };
-        const tok = res.token || "mock_token";
-        setAdminUser(userObj);
-        setAdminToken(tok);
-        sessionStorage.setItem("ff_admin_session", JSON.stringify(userObj));
-        sessionStorage.setItem("ff_admin_token", tok);
-        setIdentifierInput("");
-        setPasswordInput("");
-        loadPortalData(tok);
+      if (res && res.success && res.user) {
+        const loggedUser = res.user;
+        const token = res.token || "admin_session_" + Date.now();
+
+        setAdminUser(loggedUser);
+        setAdminToken(token);
+        sessionStorage.setItem("ff_admin_session", JSON.stringify(loggedUser));
+        sessionStorage.setItem("ff_admin_token", token);
+
+        if (loggedUser.role === "advisor_creator" || loggedUser.role === "creator") {
+          setActiveTab("team");
+        } else {
+          setActiveTab("crm");
+        }
+
+        await loadPortalData(token);
       } else {
         setAuthError(res?.error || "Invalid username or password.");
       }
     } catch (err) {
-      setAuthError("Failed to authenticate. Please check server connection.");
+      console.error("Login call error:", err);
+      setAuthError("Network error. Please try again.");
     } finally {
       setIsVerifying(false);
     }
@@ -207,15 +212,21 @@ function AdminPortalMain() {
     setAdminToken("");
     sessionStorage.removeItem("ff_admin_session");
     sessionStorage.removeItem("ff_admin_token");
+    setActiveTab("crm");
   };
 
   const handleExitToClient = () => {
-    if (typeof setPortalMode === "function") setPortalMode("client");
-    window.location.href = "/";
+    if (typeof onBackToClient === "function") {
+      onBackToClient();
+    } else if (typeof setPortalMode === "function") {
+      setPortalMode("client");
+    }
+    const cleanUrl = window.location.pathname.replace(/\/adm(in)?|\/frm/gi, "") || "/";
+    window.history.pushState({}, "", cleanUrl);
   };
 
   // If not authenticated, render Login Screen
-  if (!adminUser || !adminToken) {
+  if (!adminUser) {
     return (
       <div style={{ minHeight: "85vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "100px 24px 60px" }}>
         <div
@@ -256,23 +267,24 @@ function AdminPortalMain() {
             Advisory & CRM Console
           </h2>
           <p style={{ fontSize: 13.5, color: "var(--text-fog)", marginBottom: 26, lineHeight: 1.5 }}>
-            Sign in to access the client lead workspace.
+            Sign in to access your assigned client lead workspace.
           </p>
 
           <form onSubmit={handleLoginSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {/* Username Input */}
             <div className="ff-form-group" style={{ margin: 0, textAlign: "left" }}>
-              <label>Username / Advisor ID</label>
+              <label>Username / Email / Advisor ID</label>
               <input
                 type="text"
                 className="ff-input"
-                placeholder="Enter username or ID..."
+                placeholder="Enter username, email, or handle..."
                 value={identifierInput}
                 onChange={(e) => {
                   setIdentifierInput(e.target.value);
                   if (authError) setAuthError("");
                 }}
                 autoFocus
+                required
               />
             </div>
 
@@ -397,39 +409,59 @@ function AdminPortalMain() {
     <div className="ff-admin-page">
       
       {/* 1. ADMIN CONSOLE HEADER */}
-      <div className="ff-admin-header-card">
+      <div className="ff-admin-header-card" style={{ marginBottom: 24 }}>
         <div className="ff-admin-header-content">
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-              {isSuperAdmin ? (
-                <span className="ff-badge ff-badge-gold" style={{ fontSize: 11, padding: "4px 10px", whiteSpace: "nowrap" }}>
+            {/* Top Bar: Role badge + Active status */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+              {isSuperAdmin && (
+                <span className="ff-badge ff-badge-gold" style={{ fontSize: 11.5, padding: "5px 12px", fontWeight: 700, borderRadius: 8 }}>
                   👑 Super Admin Console (Full Access)
                 </span>
-              ) : (
-                <span className="ff-badge ff-badge-ok" style={{ fontSize: 11, padding: "4px 10px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5 }}>
-                  💼 Advisor: <b>{adminUser?.name || "Advisor"}</b>
+              )}
+              {isAdvisorCreator && (
+                <span className="ff-badge" style={{ fontSize: 11.5, padding: "5px 12px", fontWeight: 700, borderRadius: 8, background: "rgba(99, 102, 241, 0.18)", color: "#818CF8", border: "1px solid rgba(99, 102, 241, 0.35)" }}>
+                  🛠️ Advisor Creator
                 </span>
               )}
-              <span style={{ fontSize: 11.5, color: "var(--accent-teal)", fontWeight: 600, whiteSpace: "nowrap" }}>
+              {isItManager && (
+                <span className="ff-badge" style={{ fontSize: 11.5, padding: "5px 12px", fontWeight: 700, borderRadius: 8, background: "rgba(168, 85, 247, 0.18)", color: "#C084FC", border: "1px solid rgba(168, 85, 247, 0.35)" }}>
+                  🖥️ IT & Database Manager
+                </span>
+              )}
+              {isAdvisor && (
+                <span className="ff-badge ff-badge-ok" style={{ fontSize: 11.5, padding: "5px 12px", fontWeight: 700, borderRadius: 8 }}>
+                  💼 Business Partner: <b>{adminUser?.name || "Advisor"}</b>
+                </span>
+              )}
+              <span style={{ fontSize: 11.5, color: "var(--accent-teal)", fontWeight: 600 }}>
                 ● Active Session
               </span>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.35)", padding: "2px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10B981", display: "inline-block", boxShadow: "0 0 6px #10B981" }}></span>
-                <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>MongoDB Atlas: Connected ({totalLeads} Leads)</span>
-              </div>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255, 255, 255, 0.05)", border: "1px solid var(--border-subtle)", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>
-                <span style={{ fontSize: 10, color: "var(--text-fog)", textTransform: "uppercase" }}>powered by</span>
-                <img src="/apkacoach-logo-dark.png" alt="ApkaCoach" style={{ height: 13, width: "auto" }} />
-              </div>
             </div>
+
+            {/* Title */}
             <h1 className="ff-admin-header-title">
-              {isSuperAdmin ? "Platform Leads CRM & Advisor Distribution" : "My Assigned Client Leads & Consultations"}
+              {isAdvisorCreator
+                ? "Advisor Team & Partner Distribution"
+                : isSuperAdmin
+                ? "Platform Leads CRM & Advisor Distribution"
+                : "My Assigned Client Leads & Consultations"}
             </h1>
+
+            {/* Subtitle */}
             <p className="ff-admin-header-sub">
-              {isSuperAdmin
+              {isAdvisorCreator
+                ? "Create advisor credentials, distribute personalized referral links, and monitor team performance."
+                : isSuperAdmin
                 ? "Assign client leads, manage advisor team credentials, track conversion rates, and audit system logs."
-                : "Manage your assigned clients, review diagnostic dossiers, log call notes, and update pipeline stages."}
+                : "Manage your assigned clients, review diagnostic assessments, and track consultation progress."}
             </p>
+
+            {/* Transparent Powered By (Clean & Subtle beneath title) */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, opacity: 0.75 }}>
+              <span style={{ fontSize: 11, color: "var(--text-fog)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Powered by</span>
+              <img src="/apkacoach-logo-dark.png" alt="ApkaCoach" style={{ height: 14, width: "auto" }} />
+            </div>
           </div>
 
           <div className="ff-admin-header-actions">
@@ -450,6 +482,8 @@ function AdminPortalMain() {
             >
               &larr; Back to Client Screen
             </button>
+
+            {/* Refined Refresh Button */}
             <button
               onClick={() => loadPortalData(adminToken)}
               disabled={isRefreshing}
@@ -465,7 +499,7 @@ function AdminPortalMain() {
               }}
             >
               <RefreshCw size={15} style={{ animation: isRefreshing ? "spin 1s linear infinite" : "none" }} />
-              {isRefreshing ? "Syncing..." : "Sync Live DB"}
+              {isRefreshing ? "Refreshing..." : "Refresh"}
             </button>
 
             <button
@@ -488,64 +522,120 @@ function AdminPortalMain() {
         </div>
       </div>
 
+      {/* ADVISOR PERSONAL REFERRAL LINK CARD */}
+      {isAdvisor && (
+        <div
+          className="ff-card-glass"
+          style={{
+            padding: "18px 24px",
+            borderRadius: 16,
+            border: "1px solid var(--border-gold)",
+            background: "linear-gradient(135deg, rgba(201, 154, 75, 0.08) 0%, rgba(13, 14, 21, 0.95) 100%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 16,
+            marginBottom: 20
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <Share2 size={16} color="var(--accent-gold)" />
+              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-main)" }}>
+                Your Client Referral Link (Direct Assessment Credit)
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-fog)" }}>
+              Share this link with your clients. Any assessments or leads completed via this link will automatically and exclusively be credited to you.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.5)", padding: "6px 12px", borderRadius: 10, border: "1px solid var(--border-subtle)" }}>
+            <code style={{ color: "var(--accent-gold)", fontSize: 13, fontFamily: "var(--font-mono)" }}>
+              {advisorRefUrl}
+            </code>
+            <button
+              onClick={handleCopyMyRefLink}
+              className="ff-btn-primary"
+              style={{
+                height: 32,
+                padding: "0 14px",
+                fontSize: 12,
+                fontWeight: 700,
+                borderRadius: 8,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5
+              }}
+            >
+              {copiedMyLink ? "✓ Copied!" : <><Copy size={12} /> Copy Link</>}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 2. KPI SUMMARY CARDS */}
-      <div className="ff-admin-kpi-grid">
-        <div className="ff-admin-kpi-card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-fog)", fontWeight: 600 }}>
-              {isSuperAdmin ? "Total Platform Leads" : "Assigned Leads"}
-            </span>
-            <Users size={17} color="var(--accent-gold)" />
+      {!isAdvisorCreator ? (
+        <div className="ff-admin-kpi-grid">
+          <div className="ff-admin-kpi-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-fog)", fontWeight: 600 }}>
+                {isSuperAdmin ? "Total Platform Leads" : "My Assigned Leads"}
+              </span>
+              <Users size={17} color="var(--accent-gold)" />
+            </div>
+            <div className="ff-admin-kpi-val">
+              {totalLeads}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--accent-teal)", marginTop: 4 }}>
+              {isSuperAdmin ? "All Form Submissions" : "Assigned specifically to you"}
+            </div>
           </div>
-          <div className="ff-admin-kpi-val">
-            {totalLeads}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--accent-teal)", marginTop: 4 }}>
-            {isSuperAdmin ? "All Form Submissions" : "Assigned specifically to you"}
-          </div>
-        </div>
 
-        <div className="ff-admin-kpi-card" style={{ borderColor: "rgba(217, 119, 87, 0.25)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-fog)", fontWeight: 600 }}>High Gap Action</span>
-            <AlertTriangle size={17} color="var(--alert-coral)" />
+          <div className="ff-admin-kpi-card" style={{ borderColor: "rgba(217, 119, 87, 0.25)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-fog)", fontWeight: 600 }}>High Gap Action</span>
+              <AlertTriangle size={17} color="var(--alert-coral)" />
+            </div>
+            <div className="ff-admin-kpi-val" style={{ color: "var(--alert-coral)" }}>
+              {highRiskCount}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--alert-coral)", marginTop: 4 }}>
+              Priority Deficit Flagged
+            </div>
           </div>
-          <div className="ff-admin-kpi-val" style={{ color: "var(--alert-coral)" }}>
-            {highRiskCount}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--alert-coral)", marginTop: 4 }}>
-            Priority Deficit Flagged
-          </div>
-        </div>
 
-        <div className="ff-admin-kpi-card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-fog)", fontWeight: 600 }}>Converted Clients</span>
-            <CheckCircle2 size={17} color="var(--accent-emerald)" />
+          <div className="ff-admin-kpi-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-fog)", fontWeight: 600 }}>Converted Clients</span>
+              <CheckCircle2 size={17} color="var(--accent-emerald)" />
+            </div>
+            <div className="ff-admin-kpi-val" style={{ color: "var(--accent-emerald)" }}>
+              {convertedCount}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-fog)", marginTop: 4 }}>
+              {totalLeads > 0 ? `${Math.round((convertedCount / totalLeads) * 100)}% Conversion Rate` : "0% Conversion"}
+            </div>
           </div>
-          <div className="ff-admin-kpi-val" style={{ color: "var(--accent-emerald)" }}>
-            {convertedCount}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--text-fog)", marginTop: 4 }}>
-            {totalLeads > 0 ? `${Math.round((convertedCount / totalLeads) * 100)}% Conversion Rate` : "0% Conversion"}
-          </div>
-        </div>
 
-        <div className="ff-admin-kpi-card" style={{ borderColor: "var(--border-gold)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--accent-gold)", fontWeight: 600 }}>
-              {isSuperAdmin ? "Advisor Team" : "New Today"}
-            </span>
-            {isSuperAdmin ? <UserCheck size={17} color="var(--accent-gold)" /> : <Clock size={17} color="var(--accent-gold)" />}
-          </div>
-          <div className="ff-admin-kpi-val" style={{ color: "var(--accent-gold)" }}>
-            {isSuperAdmin ? teamUsers.length : reportsTodayCount}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--accent-gold)", marginTop: 4 }}>
-            {isSuperAdmin ? `${teamUsers.filter(u => u.status !== "inactive").length} Active Advisors` : "Submitted Today"}
+          <div className="ff-admin-kpi-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-fog)", fontWeight: 600 }}>
+                {isSuperAdmin ? "Active Advisors" : "Activity Today"}
+              </span>
+              <Clock size={17} color="var(--accent-gold)" />
+            </div>
+            <div className="ff-admin-kpi-val" style={{ color: "var(--accent-gold)" }}>
+              {isSuperAdmin ? teamUsers.filter(u => u.status !== "inactive").length : reportsTodayCount}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--accent-gold)", marginTop: 4 }}>
+              {isSuperAdmin ? `${teamUsers.length} Registered Team Members` : "Submitted Today"}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* 3. PAGE TOOLBAR & ROLE-AWARE TAB SWITCHER */}
       <div className="ff-admin-tab-bar-container">
@@ -559,29 +649,36 @@ function AdminPortalMain() {
 
         {/* TAB BUTTONS */}
         <div className="ff-admin-tab-bar">
-          <button
-            onClick={() => setActiveTab("crm")}
-            className="ff-admin-tab-btn"
-            style={{
-              background: activeTab === "crm" ? "var(--accent-gold)" : "transparent",
-              color: activeTab === "crm" ? "#07080C" : "var(--text-fog)",
-            }}
-          >
-            <Users size={14} /> {isSuperAdmin ? `All Leads (${totalLeads})` : `My Leads (${totalLeads})`}
-          </button>
+          {/* CRM / Leads Tab: Visible to SuperAdmin and Advisor, Hidden for Advisor Creator */}
+          {!isAdvisorCreator && (
+            <button
+              onClick={() => setActiveTab("crm")}
+              className="ff-admin-tab-btn"
+              style={{
+                background: activeTab === "crm" ? "var(--accent-gold)" : "transparent",
+                color: activeTab === "crm" ? "#07080C" : "var(--text-fog)",
+              }}
+            >
+              <Users size={14} /> {isSuperAdmin ? `All Leads (${totalLeads})` : `My Leads (${totalLeads})`}
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab("forms")}
-            className="ff-admin-tab-btn"
-            style={{
-              background: activeTab === "forms" ? "var(--accent-gold)" : "transparent",
-              color: activeTab === "forms" ? "#07080C" : "var(--text-fog)",
-            }}
-          >
-            <FileSpreadsheet size={14} /> Form Responses ({totalForms})
-          </button>
-
+          {/* Form Responses: Super Admin only */}
           {isSuperAdmin && (
+            <button
+              onClick={() => setActiveTab("forms")}
+              className="ff-admin-tab-btn"
+              style={{
+                background: activeTab === "forms" ? "var(--accent-gold)" : "transparent",
+                color: activeTab === "forms" ? "#07080C" : "var(--text-fog)",
+              }}
+            >
+              <FileSpreadsheet size={14} /> Form Responses ({totalForms})
+            </button>
+          )}
+
+          {/* Advisor Team: Super Admin, Advisor Creator, IT Manager */}
+          {canManageTeam && (
             <button
               onClick={() => setActiveTab("team")}
               className="ff-admin-tab-btn"
@@ -594,18 +691,23 @@ function AdminPortalMain() {
             </button>
           )}
 
-          <button
-            onClick={() => setActiveTab("enquiries")}
-            className="ff-admin-tab-btn"
-            style={{
-              background: activeTab === "enquiries" ? "var(--accent-gold)" : "transparent",
-              color: activeTab === "enquiries" ? "#07080C" : "var(--text-fog)",
-            }}
-          >
-            <Mail size={14} /> Enquiries ({totalEnquiries})
-          </button>
+          {/* Enquiries: Super Admin only */}
+          {/* Enquiries Tab: Super Admin & Advisors */}
+          {!isAdvisorCreator && (
+            <button
+              onClick={() => setActiveTab("enquiries")}
+              className="ff-admin-tab-btn"
+              style={{
+                background: activeTab === "enquiries" ? "var(--accent-gold)" : "transparent",
+                color: activeTab === "enquiries" ? "#07080C" : "var(--text-fog)",
+              }}
+            >
+              <Mail size={14} /> Enquiries ({totalEnquiries})
+            </button>
+          )}
 
-          {isSuperAdmin && (
+          {/* Logs: Super Admin and IT Manager */}
+          {(isSuperAdmin || isItManager) && (
             <button
               onClick={() => setActiveTab("logs")}
               className="ff-admin-tab-btn"
@@ -621,7 +723,7 @@ function AdminPortalMain() {
       </div>
 
       {/* 4. MAIN DATA TAB DISPLAY */}
-      {activeTab === "crm" && (
+      {activeTab === "crm" && !isAdvisorCreator && (
         <LeadTable
           leads={safeLeads}
           teamUsers={teamUsers}
@@ -632,14 +734,15 @@ function AdminPortalMain() {
         />
       )}
 
-      {activeTab === "forms" && (
+      {activeTab === "forms" && isSuperAdmin && (
         <FormResponsesTable
+          teamUsers={teamUsers}
           adminToken={adminToken}
           onRefresh={() => loadPortalData(adminToken)}
         />
       )}
 
-      {activeTab === "team" && isSuperAdmin && (
+      {activeTab === "team" && canManageTeam && (
         <AdvisorTeamManager
           teamUsers={teamUsers}
           adminToken={adminToken}
@@ -648,28 +751,37 @@ function AdminPortalMain() {
         />
       )}
 
-      {activeTab === "enquiries" && <EnquiryTable />}
-      {activeTab === "logs" && isSuperAdmin && <SystemLogsTable />}
-
-      {/* 5. LEAD DETAIL MODAL WORKSPACE */}
-      {selectedLead && (
-        <LeadDetailModal
-          lead={selectedLead}
-          onClose={() => setSelectedLead(null)}
+      {activeTab === "enquiries" && !isAdvisorCreator && (
+        <EnquiryTable
+          enquiries={safeEnquiries}
           teamUsers={teamUsers}
           adminRole={adminUser?.role}
           adminToken={adminToken}
           onRefresh={() => loadPortalData(adminToken)}
         />
       )}
-    </div>
-  );
-}
 
-export default function AdminPortal() {
-  return (
-    <AdminErrorBoundary>
-      <AdminPortalMain />
-    </AdminErrorBoundary>
+      {activeTab === "logs" && (isSuperAdmin || isItManager) && (
+        <SystemLogsTable adminToken={adminToken} />
+      )}
+
+      {/* 5. MODAL: FULL LEAD DOSSIER & ACTIONS */}
+      {selectedLead && (
+        <LeadDetailModal
+          lead={selectedLead}
+          teamUsers={teamUsers}
+          adminRole={adminUser?.role}
+          adminToken={adminToken}
+          onClose={() => setSelectedLead(null)}
+          onUpdateLead={(updatedLead) => {
+            setAdminLeads((prev) =>
+              prev.map((l) => (l.id === updatedLead.id || l._id === updatedLead.id ? updatedLead : l))
+            );
+            setSelectedLead(updatedLead);
+          }}
+          onRefreshList={() => loadPortalData(adminToken)}
+        />
+      )}
+    </div>
   );
 }

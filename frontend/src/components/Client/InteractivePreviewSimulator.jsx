@@ -94,7 +94,7 @@ export default function InteractivePreviewSimulator({ onStartFullAssessment }) {
   return (
     <div className="ff-card-glass ff-simulator-container">
       {/* Decorative ambient background glow */}
-      <div className="ff-simulator-bg-glow" />
+      
 
       {/* Simulator Header without clutter badges */}
       <div className="ff-simulator-header" style={{ marginBottom: 24 }}>

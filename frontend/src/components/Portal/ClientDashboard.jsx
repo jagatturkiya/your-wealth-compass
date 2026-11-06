@@ -167,7 +167,7 @@ export default function ClientDashboard({ onStartNewAssessment, onCloneAssessmen
                 alignItems: "center",
                 justifyContent: "center",
                 fontWeight: 800,
-                boxShadow: "0 0 25px rgba(201, 154, 75, 0.35)",
+                
                 flexShrink: 0
               }}
             >
@@ -227,7 +227,7 @@ export default function ClientDashboard({ onStartNewAssessment, onCloneAssessmen
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 7,
-                boxShadow: "0 0 25px rgba(201, 154, 75, 0.3)"
+                
               }}
             >
               <PlusCircle size={16} /> Take New Assessment

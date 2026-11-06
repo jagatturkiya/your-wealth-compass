@@ -746,7 +746,14 @@ router.get("/enquiries", async (req, res) => {
 
     let filter = {};
     if (authUser && authUser.role === "advisor") {
-      filter = { "assignedTo.advisorId": authUser.id };
+      filter = {
+        $or: [
+          { "assignedTo.advisorId": authUser.id },
+          { "assignedTo.advisorId": "all_advisors" },
+          ...(authUser.referralCode ? [{ referralCode: authUser.referralCode }] : []),
+          ...(authUser.username ? [{ referralCode: authUser.username.toLowerCase() }] : [])
+        ]
+      };
     }
 
     let enquiries = [];
@@ -836,7 +843,14 @@ router.get("/form-responses", async (req, res) => {
 
     let filter = {};
     if (authUser && authUser.role === "advisor") {
-      filter = { "assignedTo.advisorId": authUser.id };
+      filter = {
+        $or: [
+          { "assignedTo.advisorId": authUser.id },
+          { "assignedTo.advisorId": "all_advisors" },
+          ...(authUser.referralCode ? [{ referralCode: authUser.referralCode }] : []),
+          ...(authUser.username ? [{ referralCode: authUser.username.toLowerCase() }] : [])
+        ]
+      };
     }
 
     let responses = [];
@@ -1027,6 +1041,66 @@ router.post("/form-responses/:id/assign", async (req, res) => {
     await fr.save();
 
     res.json({ success: true, message: `Form response assigned to ${advisorName || "Unassigned"}` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/v1/admin/enquiries/bulk-assign — bulk update visibility / assignment
+router.post("/enquiries/bulk-assign", async (req, res) => {
+  try {
+    const { ids, assignAll, currentFilter, advisorId, advisorName, advisorEmail, advisorDesignation } = req.body;
+    const assignment = {
+      advisorId: advisorId || null,
+      advisorName: advisorName || (advisorId === "all_advisors" ? "All Advisors (Shared)" : advisorId === "superadmin_only" ? "Super Admin Only (Private)" : "Unassigned"),
+      advisorEmail: advisorEmail || "",
+      advisorDesignation: advisorDesignation || "Certified Financial Advisor",
+      assignedAt: advisorId ? new Date() : null
+    };
+
+    let query = {};
+    if (assignAll) {
+      if (currentFilter === "unassigned") query = { $or: [{ "assignedTo.advisorId": null }, { "assignedTo.advisorId": "" }, { "assignedTo.advisorId": { $exists: false } }] };
+      else if (currentFilter === "all_advisors") query = { "assignedTo.advisorId": "all_advisors" };
+      else if (currentFilter === "superadmin_only") query = { "assignedTo.advisorId": "superadmin_only" };
+    } else if (Array.isArray(ids) && ids.length > 0) {
+      query = { _id: { $in: ids } };
+    } else {
+      return res.status(400).json({ success: false, error: "No records specified." });
+    }
+
+    const result = await Enquiry.updateMany(query, { $set: { assignedTo: assignment } });
+    res.json({ success: true, count: result.modifiedCount, message: `Updated ${result.modifiedCount} enquiries.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/v1/admin/form-responses/bulk-assign — bulk update visibility / assignment
+router.post("/form-responses/bulk-assign", async (req, res) => {
+  try {
+    const { ids, assignAll, currentFilter, advisorId, advisorName, advisorEmail, advisorDesignation } = req.body;
+    const assignment = {
+      advisorId: advisorId || null,
+      advisorName: advisorName || (advisorId === "all_advisors" ? "All Advisors (Shared)" : advisorId === "superadmin_only" ? "Super Admin Only (Private)" : "Unassigned"),
+      advisorEmail: advisorEmail || "",
+      advisorDesignation: advisorDesignation || "Certified Financial Advisor",
+      assignedAt: advisorId ? new Date() : null
+    };
+
+    let query = {};
+    if (assignAll) {
+      if (currentFilter === "unassigned") query = { $or: [{ "assignedTo.advisorId": null }, { "assignedTo.advisorId": "" }, { "assignedTo.advisorId": { $exists: false } }] };
+      else if (currentFilter === "all_advisors") query = { "assignedTo.advisorId": "all_advisors" };
+      else if (currentFilter === "superadmin_only") query = { "assignedTo.advisorId": "superadmin_only" };
+    } else if (Array.isArray(ids) && ids.length > 0) {
+      query = { _id: { $in: ids } };
+    } else {
+      return res.status(400).json({ success: false, error: "No records specified." });
+    }
+
+    const result = await FormResponse.updateMany(query, { $set: { assignedTo: assignment } });
+    res.json({ success: true, count: result.modifiedCount, message: `Updated ${result.modifiedCount} form responses.` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

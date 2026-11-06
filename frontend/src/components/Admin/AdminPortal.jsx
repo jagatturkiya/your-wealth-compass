@@ -737,6 +737,7 @@ function AdminPortalContent({ onBackToClient }) {
       {activeTab === "forms" && isSuperAdmin && (
         <FormResponsesTable
           teamUsers={teamUsers}
+          adminRole={adminUser?.role}
           adminToken={adminToken}
           onRefresh={() => loadPortalData(adminToken)}
         />

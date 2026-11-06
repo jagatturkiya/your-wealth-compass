@@ -622,3 +622,35 @@ export async function assignFormResponseAdvisorApi(responseId, payload, token) {
     return { success: false, error: err.message };
   }
 }
+
+export async function bulkAssignEnquiriesApi(payload, token) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(`${API_BASE_URL}/admin/enquiries/bulk-assign`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("bulkAssignEnquiriesApi failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function bulkAssignFormResponsesApi(payload, token) {
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(`${API_BASE_URL}/admin/form-responses/bulk-assign`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("bulkAssignFormResponsesApi failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}

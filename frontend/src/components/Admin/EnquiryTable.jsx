@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  Mail, Search, Trash2, Eye, Calendar, Phone, MessageCircle
+  Search, Phone, Trash2, Eye
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { assignEnquiryAdvisorApi } from "../../services/api";
@@ -24,33 +24,6 @@ function getCleanPhoneDigits(raw) {
   return digits.length >= 10 ? digits.slice(-10) : digits;
 }
 
-export function parseFormProfile(msg) {
-  if (!msg || typeof msg !== "string") return null;
-  const hasProfile = msg.includes("City:") || msg.includes("Education:") || msg.includes("Profession:");
-  if (!hasProfile) return null;
-
-  const cityMatch = msg.match(/City:\s*([^|]+)/i);
-  const eduMatch = msg.match(/Education:\s*([^|]+)/i);
-  const profMatch = msg.match(/Profession:\s*([^|]+)/i);
-  const emailMatch = msg.match(/Verified Email:\s*([^|]+)/i);
-
-  let remaining = msg
-    .replace(/City:\s*[^|]+(\|)?/i, "")
-    .replace(/Education:\s*[^|]+(\|)?/i, "")
-    .replace(/Profession:\s*[^|]+(\|)?/i, "")
-    .replace(/Verified Email:\s*[^|]+(\|)?/i, "")
-    .replace(/^[|\s]+|[|\s]+$/g, "")
-    .trim();
-
-  return {
-    city: cityMatch ? cityMatch[1].trim() : "",
-    education: eduMatch ? eduMatch[1].trim() : "",
-    profession: profMatch ? profMatch[1].trim() : "",
-    verifiedEmail: emailMatch ? emailMatch[1].trim() : "",
-    remainingMessage: remaining
-  };
-}
-
 export default function EnquiryTable({
   enquiries = null,
   teamUsers = [],
@@ -64,6 +37,7 @@ export default function EnquiryTable({
   const [searchTerm, setSearchTerm] = useState("");
   const [topicFilter, setTopicFilter] = useState("all");
   const [advisorFilter, setAdvisorFilter] = useState("all");
+  const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
   const [assigningId, setAssigningId] = useState(null);
   const [actionNotice, setActionNotice] = useState("");
@@ -149,14 +123,18 @@ export default function EnquiryTable({
 
     const currentAdvId = enq.assignedTo?.advisorId || "";
 
-    if (advisorFilter === "all_advisors") {
-      if (currentAdvId !== "all_advisors") return false;
-    } else if (advisorFilter === "superadmin_only") {
-      if (currentAdvId !== "superadmin_only") return false;
-    } else if (advisorFilter === "unassigned") {
-      if (currentAdvId) return false;
-    } else if (advisorFilter !== "all") {
+    // 1. Advisor Filter (Person / Team only)
+    if (advisorFilter !== "all") {
       if (currentAdvId !== advisorFilter) return false;
+    }
+
+    // 2. Visibility Filter (Show to All / Show to None / Unassigned)
+    if (visibilityFilter === "all_advisors") {
+      if (currentAdvId !== "all_advisors") return false;
+    } else if (visibilityFilter === "superadmin_only") {
+      if (currentAdvId !== "superadmin_only") return false;
+    } else if (visibilityFilter === "unassigned") {
+      if (currentAdvId) return false;
     }
 
     return searchPass && topicPass;
@@ -188,7 +166,7 @@ export default function EnquiryTable({
         </div>
       )}
 
-      {/* 1. Full-Width Clean Search Bar (Matches LeadTable) */}
+      {/* 1. Full-Width Clean Search Bar */}
       <div style={{ position: "relative", width: "100%", marginBottom: 14 }}>
         <div style={{ position: "absolute", left: 16, top: 0, bottom: 0, display: "flex", alignItems: "center", pointerEvents: "none", zIndex: 3 }}>
           <Search size={17} color="var(--text-fog)" />
@@ -202,7 +180,7 @@ export default function EnquiryTable({
         />
       </div>
 
-      {/* 2. Compact Horizontal Filters Row (Matches LeadTable) */}
+      {/* 2. Compact Horizontal Filters Row */}
       <div className="ff-crm-filters-bar">
         <div className="ff-crm-filter-group">
           {/* Topic Filter */}
@@ -218,24 +196,34 @@ export default function EnquiryTable({
             ))}
           </select>
 
-          {/* Visibility / Advisor Filter */}
+          {/* Filter by Advisor (Name / Person / Team only) */}
           <select
             className="ff-select ff-crm-filter-select"
             value={advisorFilter}
             onChange={(e) => setAdvisorFilter(e.target.value)}
-            style={{ minWidth: 170 }}
+            style={{ minWidth: 160 }}
           >
-            <option value="all">Filter by Advisor: All</option>
-            <option value="all_advisors">🌐 Show to All Users</option>
-            <option value="superadmin_only">🔒 Show to None (Private)</option>
-            <option value="unassigned">⚠️ Unassigned</option>
-            <optgroup label="Assigned Advisors">
+            <option value="all">All Advisors</option>
+            <optgroup label="Advisors & Team Members">
               {teamUsers.map((u) => (
                 <option key={u.id || u._id} value={u.id || u._id}>
-                  👤 {u.name}
+                  👤 {u.name} {u.role === "advisor_creator" ? "(Creator)" : ""}
                 </option>
               ))}
             </optgroup>
+          </select>
+
+          {/* Visibility Filter (Show to All / Show to None) */}
+          <select
+            className="ff-select ff-crm-filter-select"
+            value={visibilityFilter}
+            onChange={(e) => setVisibilityFilter(e.target.value)}
+            style={{ minWidth: 175 }}
+          >
+            <option value="all">Visibility: All</option>
+            <option value="all_advisors">🌐 Show to All Advisors</option>
+            <option value="superadmin_only">🔒 Show to No Advisors</option>
+            <option value="unassigned">⚠️ Unassigned (Hidden)</option>
           </select>
         </div>
 
@@ -329,15 +317,15 @@ export default function EnquiryTable({
                               height: 28,
                               padding: "0 8px",
                               fontSize: 12,
-                              minWidth: 150,
+                              minWidth: 155,
                               borderRadius: 6
                             }}
                             disabled={assigningId === enqId}
                           >
                             <option value="">⚠️ Unassigned (Hidden)</option>
-                            <option value="all_advisors">🌐 Show to All Users</option>
-                            <option value="superadmin_only">🔒 Show to None (Private)</option>
-                            <optgroup label="Assign Specific Advisor">
+                            <option value="all_advisors">🌐 Show to All Advisors</option>
+                            <option value="superadmin_only">🔒 Show to No Advisors</option>
+                            <optgroup label="Assign to Advisor">
                               {teamUsers.map((u) => (
                                 <option key={u.id || u._id} value={u.id || u._id}>
                                   👤 {u.name}
@@ -428,9 +416,9 @@ export default function EnquiryTable({
                   disabled={assigningId === (selectedEnquiry.id || selectedEnquiry._id)}
                 >
                   <option value="">⚠️ Unassigned (Hidden from Advisors)</option>
-                  <option value="all_advisors">🌐 Show to All Users</option>
-                  <option value="superadmin_only">🔒 Show to None (Private)</option>
-                  <optgroup label="Assign to Specific Advisor">
+                  <option value="all_advisors">🌐 Show to All Advisors</option>
+                  <option value="superadmin_only">🔒 Show to No Advisors</option>
+                  <optgroup label="Assign to Advisor">
                     {teamUsers.map((u) => (
                       <option key={u.id || u._id} value={u.id || u._id}>
                         👤 {u.name} ({u.designation || "Advisor"})
@@ -487,7 +475,7 @@ export default function EnquiryTable({
                   textDecoration: "none"
                 }}
               >
-                <MessageCircle size={14} /> Chat with Client on WhatsApp
+                Chat with Client on WhatsApp
               </a>
             )}
           </div>

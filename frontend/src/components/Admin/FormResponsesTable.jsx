@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
-  Search, Phone, MessageCircle, Mail, MapPin, GraduationCap, Briefcase,
-  Download, Trash2, Eye
+  Search, Phone, Download, Trash2, Eye
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { assignFormResponseAdvisorApi } from "../../services/api";
@@ -45,6 +44,7 @@ export default function FormResponsesTable({
   const [cityFilter, setCityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [advisorFilter, setAdvisorFilter] = useState("all");
+  const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [selectedResponse, setSelectedResponse] = useState(null);
   const [actionNotice, setActionNotice] = useState("");
   const [assigningId, setAssigningId] = useState(null);
@@ -122,14 +122,18 @@ export default function FormResponsesTable({
 
     const currentAdvId = r.assignedTo?.advisorId || "";
 
-    if (advisorFilter === "all_advisors") {
-      if (currentAdvId !== "all_advisors") return false;
-    } else if (advisorFilter === "superadmin_only") {
-      if (currentAdvId !== "superadmin_only") return false;
-    } else if (advisorFilter === "unassigned") {
-      if (currentAdvId) return false;
-    } else if (advisorFilter !== "all") {
+    // 1. Advisor Filter (Person / Team only)
+    if (advisorFilter !== "all") {
       if (currentAdvId !== advisorFilter) return false;
+    }
+
+    // 2. Visibility Filter (Show to All / Show to None / Unassigned)
+    if (visibilityFilter === "all_advisors") {
+      if (currentAdvId !== "all_advisors") return false;
+    } else if (visibilityFilter === "superadmin_only") {
+      if (currentAdvId !== "superadmin_only") return false;
+    } else if (visibilityFilter === "unassigned") {
+      if (currentAdvId) return false;
     }
 
     return true;
@@ -194,7 +198,7 @@ export default function FormResponsesTable({
         </div>
       )}
 
-      {/* 1. Full-Width Clean Search Bar (Matches LeadTable) */}
+      {/* 1. Full-Width Clean Search Bar */}
       <div style={{ position: "relative", width: "100%", marginBottom: 14 }}>
         <div style={{ position: "absolute", left: 16, top: 0, bottom: 0, display: "flex", alignItems: "center", pointerEvents: "none", zIndex: 3 }}>
           <Search size={17} color="var(--text-fog)" />
@@ -208,9 +212,39 @@ export default function FormResponsesTable({
         />
       </div>
 
-      {/* 2. Compact Horizontal Filters Row (Matches LeadTable) */}
+      {/* 2. Compact Horizontal Filters Row */}
       <div className="ff-crm-filters-bar">
         <div className="ff-crm-filter-group">
+          {/* Filter by Advisor (Name / Person / Team only) */}
+          <select
+            className="ff-select ff-crm-filter-select"
+            value={advisorFilter}
+            onChange={(e) => setAdvisorFilter(e.target.value)}
+            style={{ minWidth: 160 }}
+          >
+            <option value="all">All Advisors</option>
+            <optgroup label="Advisors & Team Members">
+              {teamUsers.map((u) => (
+                <option key={u.id || u._id} value={u.id || u._id}>
+                  👤 {u.name} {u.role === "advisor_creator" ? "(Creator)" : ""}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+
+          {/* Visibility Filter (Show to All / Show to None) */}
+          <select
+            className="ff-select ff-crm-filter-select"
+            value={visibilityFilter}
+            onChange={(e) => setVisibilityFilter(e.target.value)}
+            style={{ minWidth: 175 }}
+          >
+            <option value="all">Visibility: All</option>
+            <option value="all_advisors">🌐 Show to All Advisors</option>
+            <option value="superadmin_only">🔒 Show to No Advisors</option>
+            <option value="unassigned">⚠️ Unassigned (Hidden)</option>
+          </select>
+
           {/* Status Filter */}
           <select
             className="ff-select ff-crm-filter-select"
@@ -225,27 +259,7 @@ export default function FormResponsesTable({
             <option value="archived">Archived</option>
           </select>
 
-          {/* Visibility / Advisor Filter */}
-          <select
-            className="ff-select ff-crm-filter-select"
-            value={advisorFilter}
-            onChange={(e) => setAdvisorFilter(e.target.value)}
-            style={{ minWidth: 170 }}
-          >
-            <option value="all">Filter by Advisor: All</option>
-            <option value="all_advisors">🌐 Show to All Users</option>
-            <option value="superadmin_only">🔒 Show to None (Private)</option>
-            <option value="unassigned">⚠️ Unassigned</option>
-            <optgroup label="Assigned Advisors">
-              {teamUsers.map((u) => (
-                <option key={u.id || u._id} value={u.id || u._id}>
-                  👤 {u.name}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-
-          {/* City Filter (compact inline) */}
+          {/* City Filter */}
           {availableCities.length > 0 && (
             <select
               className="ff-select ff-crm-filter-select"
@@ -358,15 +372,15 @@ export default function FormResponsesTable({
                               height: 28,
                               padding: "0 8px",
                               fontSize: 12,
-                              minWidth: 150,
+                              minWidth: 155,
                               borderRadius: 6
                             }}
                             disabled={assigningId === itemId}
                           >
                             <option value="">⚠️ Unassigned (Hidden)</option>
-                            <option value="all_advisors">🌐 Show to All Users</option>
-                            <option value="superadmin_only">🔒 Show to None (Private)</option>
-                            <optgroup label="Assign Specific Advisor">
+                            <option value="all_advisors">🌐 Show to All Advisors</option>
+                            <option value="superadmin_only">🔒 Show to No Advisors</option>
+                            <optgroup label="Assign to Advisor">
                               {teamUsers.map((u) => (
                                 <option key={u.id || u._id} value={u.id || u._id}>
                                   👤 {u.name}
@@ -473,9 +487,9 @@ export default function FormResponsesTable({
                   disabled={assigningId === (selectedResponse.id || selectedResponse._id)}
                 >
                   <option value="">⚠️ Unassigned (Hidden)</option>
-                  <option value="all_advisors">🌐 Show to All Users</option>
-                  <option value="superadmin_only">🔒 Show to None (Private)</option>
-                  <optgroup label="Assign to Specific Advisor">
+                  <option value="all_advisors">🌐 Show to All Advisors</option>
+                  <option value="superadmin_only">🔒 Show to No Advisors</option>
+                  <optgroup label="Assign to Advisor">
                     {teamUsers.map((u) => (
                       <option key={u.id || u._id} value={u.id || u._id}>
                         👤 {u.name} ({u.designation || "Advisor"})
@@ -535,7 +549,7 @@ export default function FormResponsesTable({
                   marginTop: 8
                 }}
               >
-                <MessageCircle size={14} /> Chat with Client on WhatsApp
+                Chat with Client on WhatsApp
               </a>
             )}
           </div>

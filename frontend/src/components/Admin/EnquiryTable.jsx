@@ -3,7 +3,7 @@ import {
   Search, Phone, Trash2, Eye
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
-import { assignEnquiryAdvisorApi } from "../../services/api";
+import { assignEnquiryAdvisorApi, bulkAssignEnquiriesApi } from "../../services/api";
 
 function formatPhoneDisplay(raw) {
   if (!raw) return "—";
@@ -37,10 +37,10 @@ export default function EnquiryTable({
   const [searchTerm, setSearchTerm] = useState("");
   const [topicFilter, setTopicFilter] = useState("all");
   const [advisorFilter, setAdvisorFilter] = useState("all");
-  const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
   const [assigningId, setAssigningId] = useState(null);
   const [actionNotice, setActionNotice] = useState("");
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false);
 
   const topicsList = [
     "All Topics",
@@ -68,18 +68,11 @@ export default function EnquiryTable({
       if (chosenValue === "all_advisors") {
         payload = {
           advisorId: "all_advisors",
-          advisorName: "All Advisors (Shared)",
+          advisorName: "All Advisors",
           advisorEmail: "",
           advisorDesignation: "Team Visibility"
         };
-      } else if (chosenValue === "superadmin_only") {
-        payload = {
-          advisorId: "superadmin_only",
-          advisorName: "Super Admin Only (Private)",
-          advisorEmail: "",
-          advisorDesignation: "Super Admin Restricted"
-        };
-      } else if (chosenValue) {
+      } else if (chosenValue && chosenValue !== "unassigned") {
         const chosen = teamUsers.find((u) => (u.id || u._id) === chosenValue);
         if (chosen) {
           payload = {
@@ -93,7 +86,7 @@ export default function EnquiryTable({
 
       const res = await assignEnquiryAdvisorApi(enquiryId, payload, adminToken);
       if (res?.success) {
-        setActionNotice(`Visibility updated: ${payload.advisorName}`);
+        setActionNotice(`✓ Assigned: ${payload.advisorName}`);
         setTimeout(() => setActionNotice(""), 2500);
         onRefresh();
         if (selectedEnquiry && (selectedEnquiry.id === enquiryId || selectedEnquiry._id === enquiryId)) {
@@ -104,6 +97,67 @@ export default function EnquiryTable({
       alert("Failed to assign enquiry: " + err.message);
     } finally {
       setAssigningId(null);
+    }
+  };
+
+  const handleBulkAssignAll = async (targetValue) => {
+    if (!targetValue) return;
+    const visibleIds = filteredEnquiries.map((e) => e.id || e._id);
+    if (visibleIds.length === 0) {
+      alert("No enquiries in view to assign.");
+      return;
+    }
+
+    let payload = {
+      ids: visibleIds,
+      advisorId: null,
+      advisorName: "Unassigned",
+      advisorEmail: "",
+      advisorDesignation: "Certified Financial Advisor"
+    };
+
+    let targetLabel = "Unassigned";
+    if (targetValue === "all_advisors") {
+      targetLabel = "Show to All Advisors";
+      payload = {
+        ids: visibleIds,
+        advisorId: "all_advisors",
+        advisorName: "All Advisors",
+        advisorEmail: "",
+        advisorDesignation: "Team Visibility"
+      };
+    } else if (targetValue && targetValue !== "unassigned") {
+      const chosen = teamUsers.find((u) => (u.id || u._id) === targetValue);
+      if (chosen) {
+        targetLabel = chosen.name;
+        payload = {
+          ids: visibleIds,
+          advisorId: chosen.id || chosen._id,
+          advisorName: chosen.name,
+          advisorEmail: chosen.email,
+          advisorDesignation: chosen.designation || "Certified Financial Advisor"
+        };
+      }
+    }
+
+    if (!window.confirm(`Assign all ${visibleIds.length} visible enquiries to "${targetLabel}"?`)) {
+      return;
+    }
+
+    setIsBulkAssigning(true);
+    try {
+      const res = await bulkAssignEnquiriesApi(payload, adminToken);
+      if (res?.success) {
+        setActionNotice(`✓ Successfully updated ${res.count || visibleIds.length} enquiries to ${targetLabel}`);
+        setTimeout(() => setActionNotice(""), 3000);
+        onRefresh();
+      } else {
+        alert(res?.error || "Failed to update assignment.");
+      }
+    } catch (err) {
+      alert("Bulk assign error: " + err.message);
+    } finally {
+      setIsBulkAssigning(false);
     }
   };
 
@@ -123,18 +177,8 @@ export default function EnquiryTable({
 
     const currentAdvId = enq.assignedTo?.advisorId || "";
 
-    // 1. Advisor Filter (Person / Team only)
     if (advisorFilter !== "all") {
       if (currentAdvId !== advisorFilter) return false;
-    }
-
-    // 2. Visibility Filter (Show to All / Show to None / Unassigned)
-    if (visibilityFilter === "all_advisors") {
-      if (currentAdvId !== "all_advisors") return false;
-    } else if (visibilityFilter === "superadmin_only") {
-      if (currentAdvId !== "superadmin_only") return false;
-    } else if (visibilityFilter === "unassigned") {
-      if (currentAdvId) return false;
     }
 
     return searchPass && topicPass;
@@ -161,28 +205,74 @@ export default function EnquiryTable({
   return (
     <div className="ff-crm-container" style={{ width: "100%", textAlign: "left" }}>
       {actionNotice && (
-        <div style={{ background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.3)", color: "#34D399", padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+        <div style={{ background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.3)", color: "#34D399", padding: "8px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>
           {actionNotice}
         </div>
       )}
 
-      {/* 1. Full-Width Clean Search Bar */}
-      <div style={{ position: "relative", width: "100%", marginBottom: 14 }}>
-        <div style={{ position: "absolute", left: 16, top: 0, bottom: 0, display: "flex", alignItems: "center", pointerEvents: "none", zIndex: 3 }}>
-          <Search size={17} color="var(--text-fog)" />
+      {/* 1. Full-Width Clean Search Bar (Zero Extra Gap) */}
+      <div style={{ position: "relative", width: "100%", marginBottom: 8 }}>
+        <div style={{ position: "absolute", left: 14, top: 0, bottom: 0, display: "flex", alignItems: "center", pointerEvents: "none", zIndex: 3 }}>
+          <Search size={16} color="var(--text-fog)" />
         </div>
         <input
           type="text"
           className="ff-input ff-crm-search-input"
-          placeholder="Search enquiries by name, email, phone, city..."
+          placeholder="Search enquiries by name, email, phone, message..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ height: 38 }}
         />
       </div>
 
-      {/* 2. Compact Horizontal Filters Row */}
-      <div className="ff-crm-filters-bar">
+      {/* 2. Compact Horizontal Filters Row (Zero Extra Gap) */}
+      <div className="ff-crm-filters-bar" style={{ marginBottom: 8 }}>
         <div className="ff-crm-filter-group">
+          {/* Filter: All Advisors */}
+          <select
+            className="ff-select ff-crm-filter-select"
+            value={advisorFilter}
+            onChange={(e) => setAdvisorFilter(e.target.value)}
+            style={{ minWidth: 155 }}
+          >
+            <option value="all">Filter: All Advisors</option>
+            <optgroup label="Advisors">
+              {teamUsers.map((u) => (
+                <option key={u.id || u._id} value={u.id || u._id}>
+                  👤 {u.name}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+
+          {/* Assign: Action Dropdown */}
+          {adminRole === "superadmin" && (
+            <select
+              className="ff-select ff-crm-filter-select"
+              defaultValue=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleBulkAssignAll(e.target.value);
+                  e.target.value = "";
+                }
+              }}
+              disabled={isBulkAssigning}
+              style={{ minWidth: 165, borderColor: "var(--border-gold)", color: "var(--accent-gold)" }}
+              title="Assign all visible enquiries to an advisor or make shared"
+            >
+              <option value="" disabled>⚡ Assign All Visible To...</option>
+              <option value="all_advisors">🌐 Show to All Advisors</option>
+              <option value="unassigned">⚠️ Unassigned (Nobody)</option>
+              <optgroup label="Assign To Advisor">
+                {teamUsers.map((u) => (
+                  <option key={u.id || u._id} value={u.id || u._id}>
+                    👤 {u.name}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          )}
+
           {/* Topic Filter */}
           <select
             className="ff-select ff-crm-filter-select"
@@ -195,36 +285,6 @@ export default function EnquiryTable({
               </option>
             ))}
           </select>
-
-          {/* Filter by Advisor (Name / Person / Team only) */}
-          <select
-            className="ff-select ff-crm-filter-select"
-            value={advisorFilter}
-            onChange={(e) => setAdvisorFilter(e.target.value)}
-            style={{ minWidth: 160 }}
-          >
-            <option value="all">All Advisors</option>
-            <optgroup label="Advisors & Team Members">
-              {teamUsers.map((u) => (
-                <option key={u.id || u._id} value={u.id || u._id}>
-                  👤 {u.name} {u.role === "advisor_creator" ? "(Creator)" : ""}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-
-          {/* Visibility Filter (Show to All / Show to None) */}
-          <select
-            className="ff-select ff-crm-filter-select"
-            value={visibilityFilter}
-            onChange={(e) => setVisibilityFilter(e.target.value)}
-            style={{ minWidth: 175 }}
-          >
-            <option value="all">Visibility: All</option>
-            <option value="all_advisors">🌐 Show to All Advisors</option>
-            <option value="superadmin_only">🔒 Show to No Advisors</option>
-            <option value="unassigned">⚠️ Unassigned (Hidden)</option>
-          </select>
         </div>
 
         <div style={{ fontSize: 12, color: "var(--text-fog)", fontWeight: 600 }}>
@@ -234,25 +294,25 @@ export default function EnquiryTable({
 
       {/* 3. Clean Table */}
       {filteredEnquiries.length === 0 ? (
-        <div style={{ padding: "48px 24px", textAlign: "center", background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 16, color: "var(--text-fog)" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-main)", marginBottom: 4 }}>
+        <div style={{ padding: "40px 20px", textAlign: "center", background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 12, color: "var(--text-fog)" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-main)", marginBottom: 4 }}>
             No Enquiries Found
           </div>
-          <p style={{ fontSize: 13, margin: 0 }}>Try clearing your search or changing filter options.</p>
+          <p style={{ fontSize: 12.5, margin: 0 }}>Try clearing your search or filter options.</p>
         </div>
       ) : (
         <div className="ff-table-wrapper" style={{ overflowX: "auto" }}>
           <table className="ff-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border-subtle)", background: "rgba(255,255,255,0.02)" }}>
-                <th style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Date</th>
-                <th style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Client Name</th>
-                <th style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Phone</th>
-                <th style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Email</th>
-                <th style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Visibility / Assign</th>
-                <th style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Topic</th>
-                <th style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Message</th>
-                <th style={{ padding: "12px 14px", textAlign: "right", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Action</th>
+                <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Date</th>
+                <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Client Name</th>
+                <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Phone</th>
+                <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Email</th>
+                <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Assign</th>
+                <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Topic</th>
+                <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Message</th>
+                <th style={{ padding: "10px 12px", textAlign: "right", fontSize: 11, textTransform: "uppercase", color: "var(--text-fog)", letterSpacing: "0.04em" }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -272,19 +332,19 @@ export default function EnquiryTable({
                       borderBottom: "1px solid rgba(255,255,255,0.04)",
                       cursor: "pointer",
                       background: idx % 2 === 0 ? "rgba(255,255,255,0.01)" : "transparent",
-                      height: 44
+                      height: 42
                     }}
                     className="ff-table-row-hover"
                   >
-                    <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "var(--text-fog)", fontSize: 12 }}>
+                    <td style={{ padding: "8px 12px", whiteSpace: "nowrap", color: "var(--text-fog)", fontSize: 12 }}>
                       {enq.submittedAt ? new Date(enq.submittedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Recent"}
                     </td>
 
-                    <td style={{ padding: "10px 14px", fontWeight: 700, color: "var(--text-main)", whiteSpace: "nowrap", fontSize: 13 }}>
+                    <td style={{ padding: "8px 12px", fontWeight: 700, color: "var(--text-main)", whiteSpace: "nowrap", fontSize: 13 }}>
                       {enq.name || "Client"}
                     </td>
 
-                    <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontSize: 12.5 }} onClick={(e) => e.stopPropagation()}>
+                    <td style={{ padding: "8px 12px", whiteSpace: "nowrap", fontSize: 12.5 }} onClick={(e) => e.stopPropagation()}>
                       {cleanPhone ? (
                         <a
                           href={`https://wa.me/91${cleanPhone}`}
@@ -301,12 +361,12 @@ export default function EnquiryTable({
                       )}
                     </td>
 
-                    <td style={{ padding: "10px 14px", color: "var(--text-fog)", maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12.5 }}>
+                    <td style={{ padding: "8px 12px", color: "var(--text-fog)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12.5 }}>
                       {enq.email || "—"}
                     </td>
 
-                    {/* ASSIGNED ADVISOR / VISIBILITY DROPDOWN */}
-                    <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                    {/* ASSIGN DROPDOWN */}
+                    <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
                       {adminRole === "superadmin" ? (
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                           <select
@@ -322,9 +382,8 @@ export default function EnquiryTable({
                             }}
                             disabled={assigningId === enqId}
                           >
-                            <option value="">⚠️ Unassigned (Hidden)</option>
-                            <option value="all_advisors">🌐 Show to All Advisors</option>
-                            <option value="superadmin_only">🔒 Show to No Advisors</option>
+                            <option value="">Unassigned</option>
+                            <option value="all_advisors">Show to All Advisors</option>
                             <optgroup label="Assign to Advisor">
                               {teamUsers.map((u) => (
                                 <option key={u.id || u._id} value={u.id || u._id}>
@@ -341,22 +400,22 @@ export default function EnquiryTable({
                         </div>
                       ) : (
                         <span style={{ fontSize: 12, fontWeight: 600, color: assignedAdvId === "all_advisors" ? "#34D399" : "var(--accent-gold)" }}>
-                          {assignedAdvId === "all_advisors" ? "🌐 Shared With Team" : `👤 ${enq.assignedTo?.advisorName || "Assigned"}`}
+                          {assignedAdvId === "all_advisors" ? "🌐 All Advisors" : `👤 ${enq.assignedTo?.advisorName || "Assigned"}`}
                         </span>
                       )}
                     </td>
 
-                    <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
                       <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: topicStyle.bg, color: topicStyle.text, border: `1px solid ${topicStyle.border}` }}>
                         {enq.topic || "General"}
                       </span>
                     </td>
 
-                    <td style={{ padding: "10px 14px", maxWidth: 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-fog)", fontSize: 12 }}>
+                    <td style={{ padding: "8px 12px", maxWidth: 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-fog)", fontSize: 12 }}>
                       {enq.message || "—"}
                     </td>
 
-                    <td style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "8px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
                       <div style={{ display: "inline-flex", gap: 6, justifyContent: "flex-end" }}>
                         <button
                           type="button"
@@ -402,11 +461,11 @@ export default function EnquiryTable({
               <button onClick={() => setSelectedEnquiry(null)} style={{ background: "none", border: "none", color: "var(--text-fog)", fontSize: 18, cursor: "pointer" }}>✕</button>
             </div>
 
-            {/* SUPER ADMIN VISIBILITY / ASSIGNMENT CARD */}
+            {/* ASSIGN CARD */}
             {adminRole === "superadmin" && (
               <div style={{ background: "rgba(201, 154, 75, 0.08)", border: "1px dashed var(--border-gold)", borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
                 <div style={{ fontSize: 11, textTransform: "uppercase", color: "var(--accent-gold)", fontWeight: 700, letterSpacing: "0.05em", marginBottom: 5 }}>
-                  Visibility & Advisor Assignment
+                  Advisor Assignment
                 </div>
                 <select
                   className="ff-select"
@@ -415,9 +474,8 @@ export default function EnquiryTable({
                   style={{ width: "100%", height: 32, fontSize: 12 }}
                   disabled={assigningId === (selectedEnquiry.id || selectedEnquiry._id)}
                 >
-                  <option value="">⚠️ Unassigned (Hidden from Advisors)</option>
-                  <option value="all_advisors">🌐 Show to All Advisors</option>
-                  <option value="superadmin_only">🔒 Show to No Advisors</option>
+                  <option value="">Unassigned</option>
+                  <option value="all_advisors">Show to All Advisors</option>
                   <optgroup label="Assign to Advisor">
                     {teamUsers.map((u) => (
                       <option key={u.id || u._id} value={u.id || u._id}>

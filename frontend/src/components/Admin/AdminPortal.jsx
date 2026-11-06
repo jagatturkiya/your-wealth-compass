@@ -53,7 +53,7 @@ class AdminErrorBoundary extends React.Component {
   }
 }
 
-export default function AdminPortal({ onBackToClient }) {
+function AdminPortalContent({ onBackToClient }) {
   const { leads: appLeads, contactEnquiries, formResponses, refreshBackendData, setPortalMode } = useApp();
   const { user: currentAuthUser } = useAuth();
 
@@ -783,5 +783,13 @@ export default function AdminPortal({ onBackToClient }) {
         />
       )}
     </div>
+  );
+}
+
+export default function AdminPortal(props) {
+  return (
+    <AdminErrorBoundary>
+      <AdminPortalContent {...props} />
+    </AdminErrorBoundary>
   );
 }

@@ -314,6 +314,7 @@ router.get("/users", async (req, res) => {
           email: u.email,
           mobile: u.mobile || "",
           role: u.role,
+          designation: u.designation || "Certified Financial Advisor",
           referralCode: refCode,
           referralLink: refLink,
           status: u.status || "active",
@@ -342,7 +343,16 @@ router.post("/users", async (req, res) => {
       return res.status(403).json({ success: false, error: "Unauthorized. Super Admin or Advisor Creator access required." });
     }
 
-    const { name, username, email, mobile, password, role = "advisor" } = req.body;
+    const {
+      name,
+      username,
+      email,
+      mobile,
+      password,
+      role = "advisor",
+      designation = "Certified Financial Advisor",
+      referralCode: customReferralCode
+    } = req.body;
 
     if (!name || !password) {
       return res.status(400).json({ success: false, error: "Name and password are required." });
@@ -382,6 +392,7 @@ router.post("/users", async (req, res) => {
       mobile: mobile ? mobile.trim() : "",
       passwordHash,
       role: targetRole,
+      designation: designation ? designation.trim() : "Certified Financial Advisor",
       referralCode: refCode,
       referralLink: refLink,
       status: "active"

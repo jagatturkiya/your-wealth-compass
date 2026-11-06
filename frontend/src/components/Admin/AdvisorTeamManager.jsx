@@ -53,7 +53,8 @@ export default function AdvisorTeamManager({
   const totalAssignedLeads = teamUsers.reduce((sum, u) => sum + (u.assignedLeadsCount || 0), 0);
   const totalConvertedLeads = teamUsers.reduce((sum, u) => sum + (u.convertedLeadsCount || 0), 0);
 
-  const previewRefCode = (newUsername || newName).toLowerCase().replace(/[^a-z0-9_-]/g, "") || "username";
+  const rawUserHandle = (newUsername || newName).toLowerCase().replace(/[^a-z0-9_-]/g, "") || "advisor";
+  const previewRefCode = refSuffix ? `${rawUserHandle}-${refSuffix}` : rawUserHandle;
   const previewRefUrl = `https://www.yourwealthcompass.in/?ref=${previewRefCode}`;
 
   const handleCopyLink = (u) => {
@@ -109,13 +110,15 @@ export default function AdvisorTeamManager({
           email: cleanEmail,
           mobile: newMobile.trim(),
           password: newPassword,
-          role: newRole
+          role: newRole,
+          designation: newDesignation ? newDesignation.trim() : "Certified Financial Advisor",
+          referralCode: previewRefCode
         },
         adminToken
       );
 
       if (res && res.success) {
-        setCreateSuccess(`✓ Account created for ${newName}! Referral: ?ref=${cleanUsername}`);
+        setCreateSuccess(`✓ Account created for ${newName}! Referral: ?ref=${res.user?.referralCode || previewRefCode}`);
         setNewName("");
         setNewUsername("");
         setNewEmail("");
@@ -601,9 +604,9 @@ export default function AdvisorTeamManager({
                     <div style={{ fontSize: 11, color: "var(--accent-gold)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                       Generated Referral Link
                     </div>
-                    {activeRefCode && (
+                    {previewRefCode && (
                       <span style={{ fontSize: 10, color: "var(--text-fog)", fontFamily: "var(--font-mono)" }}>
-                        Code: {activeRefCode}
+                        Code: {previewRefCode}
                       </span>
                     )}
                   </div>

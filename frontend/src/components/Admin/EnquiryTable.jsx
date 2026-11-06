@@ -233,43 +233,39 @@ export default function EnquiryTable({
             className="ff-select ff-crm-filter-select"
             value={advisorFilter}
             onChange={(e) => setAdvisorFilter(e.target.value)}
-            style={{ minWidth: 155 }}
+            style={{ minWidth: 150 }}
           >
             <option value="all">Filter: All Advisors</option>
-            <optgroup label="Advisors">
-              {teamUsers.map((u) => (
-                <option key={u.id || u._id} value={u.id || u._id}>
-                  👤 {u.name}
-                </option>
-              ))}
-            </optgroup>
+            {teamUsers.map((u) => (
+              <option key={u.id || u._id} value={u.id || u._id}>
+                👤 {u.name}
+              </option>
+            ))}
           </select>
 
           {/* Assign: Action Dropdown */}
           {adminRole === "superadmin" && (
             <select
               className="ff-select ff-crm-filter-select"
-              defaultValue=""
+              value=""
               onChange={(e) => {
-                if (e.target.value) {
-                  handleBulkAssignAll(e.target.value);
-                  e.target.value = "";
+                const val = e.target.value;
+                if (val) {
+                  handleBulkAssignAll(val);
                 }
               }}
               disabled={isBulkAssigning}
-              style={{ minWidth: 165, borderColor: "var(--border-gold)", color: "var(--accent-gold)" }}
-              title="Assign all visible enquiries to an advisor or make shared"
+              style={{ minWidth: 95, borderColor: "var(--border-gold)", color: "var(--accent-gold)" }}
+              title="Assign all visible enquiries"
             >
-              <option value="" disabled>⚡ Assign All Visible To...</option>
-              <option value="all_advisors">🌐 Show to All Advisors</option>
-              <option value="unassigned">⚠️ Unassigned (Nobody)</option>
-              <optgroup label="Assign To Advisor">
-                {teamUsers.map((u) => (
-                  <option key={u.id || u._id} value={u.id || u._id}>
-                    👤 {u.name}
-                  </option>
-                ))}
-              </optgroup>
+              <option value="" disabled hidden>Assign</option>
+              <option value="all_advisors">Show to All Advisors</option>
+              <option value="unassigned">Unassigned</option>
+              {teamUsers.map((u) => (
+                <option key={u.id || u._id} value={u.id || u._id}>
+                  👤 {u.name}
+                </option>
+              ))}
             </select>
           )}
 

@@ -110,13 +110,24 @@ function AdminPortalContent({ onBackToClient }) {
   const [teamUsers, setTeamUsers] = useState([]);
 
   const advisorRefCode = adminUser?.referralCode || adminUser?.username || (adminUser?.name ? adminUser.name.toLowerCase().replace(/[^a-z0-9]/g, "") : "");
-  const advisorRefUrl = `https://www.yourwealthcompass.in/?ref=${advisorRefCode}`;
+  const advisorAssessmentRefUrl = `https://www.yourwealthcompass.in/?ref=${advisorRefCode}`;
+  const advisorFormsRefUrl = `https://www.yourwealthcompass.in/forms?ref=${advisorRefCode}`;
+  const [copiedAssessmentLink, setCopiedAssessmentLink] = useState(false);
+  const [copiedFormsLink, setCopiedFormsLink] = useState(false);
 
-  const handleCopyMyRefLink = () => {
+  const handleCopyAssessmentRefLink = () => {
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(advisorRefUrl);
-      setCopiedMyLink(true);
-      setTimeout(() => setCopiedMyLink(false), 2000);
+      navigator.clipboard.writeText(advisorAssessmentRefUrl);
+      setCopiedAssessmentLink(true);
+      setTimeout(() => setCopiedAssessmentLink(false), 2000);
+    }
+  };
+
+  const handleCopyFormsRefLink = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(advisorFormsRefUrl);
+      setCopiedFormsLink(true);
+      setTimeout(() => setCopiedFormsLink(false), 2000);
     }
   };
 
@@ -143,7 +154,12 @@ function AdminPortalContent({ onBackToClient }) {
       // 2. Fetch team members (if superadmin, advisor creator, or it manager)
       if (canManageTeam) {
         const teamRes = await fetchAdminTeamUsersApi(token);
-        if (teamRes && teamRes.users) setTeamUsers(teamRes.users);
+        if (teamRes && teamRes.users) {
+          setTeamUsers(teamRes.users);
+          try {
+            localStorage.setItem("ff_team_users", JSON.stringify(teamRes.users));
+          } catch (e) {}
+        }
       }
 
       if (typeof refreshBackendData === "function") {
@@ -522,20 +538,18 @@ function AdminPortalContent({ onBackToClient }) {
         </div>
       </div>
 
-      {/* ADVISOR PERSONAL REFERRAL LINK CARD */}
+      {/* ADVISOR PERSONAL REFERRAL LINKS CARD */}
       {isAdvisor && (
         <div
           className="ff-card-glass"
           style={{
-            padding: "18px 24px",
+            padding: "20px 24px",
             borderRadius: 16,
             border: "1px solid var(--border-gold)",
             background: "linear-gradient(135deg, rgba(201, 154, 75, 0.08) 0%, rgba(13, 14, 21, 0.95) 100%)",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 16,
+            flexDirection: "column",
+            gap: 14,
             marginBottom: 20
           }}
         >
@@ -543,35 +557,79 @@ function AdminPortalContent({ onBackToClient }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
               <Share2 size={16} color="var(--accent-gold)" />
               <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-main)" }}>
-                Your Client Referral Link (Direct Assessment Credit)
+                Your Business Partner & Client Referral Links
+              </span>
+              <span style={{ fontSize: 11, background: "rgba(201, 154, 75, 0.15)", color: "var(--accent-gold)", padding: "2px 8px", borderRadius: 6, fontWeight: 600 }}>
+                Code: {advisorRefCode}
               </span>
             </div>
             <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-fog)" }}>
-              Share this link with your clients. Any assessments or leads completed via this link will automatically and exclusively be credited to you.
+              Share these links with your clients and partners. Submissions made via your referral links will automatically and exclusively be credited to you.
             </p>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.5)", padding: "6px 12px", borderRadius: 10, border: "1px solid var(--border-subtle)" }}>
-            <code style={{ color: "var(--accent-gold)", fontSize: 13, fontFamily: "var(--font-mono)" }}>
-              {advisorRefUrl}
-            </code>
-            <button
-              onClick={handleCopyMyRefLink}
-              className="ff-btn-primary"
-              style={{
-                height: 32,
-                padding: "0 14px",
-                fontSize: 12,
-                fontWeight: 700,
-                borderRadius: 8,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5
-              }}
-            >
-              {copiedMyLink ? "✓ Copied!" : <><Copy size={12} /> Copy Link</>}
-            </button>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
+            {/* 1. Assessment Wizard Link */}
+            <div style={{ background: "rgba(0,0,0,0.5)", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "var(--text-fog)", fontWeight: 700, textTransform: "uppercase" }}>
+                  1. Assessment Wizard Link
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyAssessmentRefLink}
+                  className="ff-btn-primary"
+                  style={{
+                    height: 28,
+                    padding: "0 12px",
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5
+                  }}
+                >
+                  {copiedAssessmentLink ? "✓ Copied!" : <><Copy size={11} /> Copy Assessment</>}
+                </button>
+              </div>
+              <code style={{ color: "var(--text-main)", fontSize: 12, fontFamily: "var(--font-mono)", wordBreak: "break-all" }}>
+                {advisorAssessmentRefUrl}
+              </code>
+            </div>
+
+            {/* 2. Business Partner Application Form Link */}
+            <div style={{ background: "rgba(0,0,0,0.5)", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "var(--accent-gold)", fontWeight: 700, textTransform: "uppercase" }}>
+                  2. Business Partner Application (/forms)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyFormsRefLink}
+                  className="ff-btn-primary"
+                  style={{
+                    height: 28,
+                    padding: "0 12px",
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    background: "var(--accent-gold)",
+                    color: "#07080C"
+                  }}
+                >
+                  {copiedFormsLink ? "✓ Copied!" : <><Copy size={11} /> Copy Form Link</>}
+                </button>
+              </div>
+              <code style={{ color: "var(--accent-gold)", fontSize: 12, fontFamily: "var(--font-mono)", wordBreak: "break-all" }}>
+                {advisorFormsRefUrl}
+              </code>
+            </div>
           </div>
         </div>
       )}
@@ -663,8 +721,8 @@ function AdminPortalContent({ onBackToClient }) {
             </button>
           )}
 
-          {/* Form Responses: Super Admin only */}
-          {isSuperAdmin && (
+          {/* Form Responses: Super Admin and Advisors */}
+          {!isAdvisorCreator && (
             <button
               onClick={() => setActiveTab("forms")}
               className="ff-admin-tab-btn"

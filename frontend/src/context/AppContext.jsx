@@ -224,6 +224,9 @@ export function AppProvider({ children }) {
       profession: formData.profession || "",
       status: rawRes.status || "new",
       source: "Forms Portal (/forms)",
+      referralCode: rawRes.referralCode || formData.referralCode || "",
+      sourceAdvisor: rawRes.sourceAdvisor || null,
+      assignedTo: rawRes.assignedTo || null,
       submittedAt: rawRes.createdAt || new Date().toISOString(),
       createdAt: rawRes.createdAt || new Date().toISOString()
     };
@@ -245,6 +248,9 @@ export function AppProvider({ children }) {
       mobile: newResponse.mobile,
       city: newResponse.city,
       leadStatus: "new",
+      referralCode: newResponse.referralCode,
+      sourceAdvisor: newResponse.sourceAdvisor,
+      assignedTo: newResponse.assignedTo,
       goals: [newResponse.profession, newResponse.education].filter(Boolean),
       submittedAt: newResponse.submittedAt,
       createdAt: newResponse.createdAt,
@@ -319,6 +325,9 @@ export function AppProvider({ children }) {
       healthAmount: String(leadData.healthAmount || "0"),
       goals: Array.isArray(leadData.goals) ? leadData.goals : [],
       pdfUrl: res.pdfUrl || rawReport.pdfUrl,
+      sourceAdvisor: rawReport.sourceAdvisor || (res.report?.sourceAdvisor) || null,
+      assignedTo: rawReport.assignedTo || (res.report?.assignedTo) || null,
+      referralCode: rawReport.referralCode || payload.referralCode || storedRef || "",
       submittedAt: rawReport.createdAt || new Date().toISOString()
     };
 

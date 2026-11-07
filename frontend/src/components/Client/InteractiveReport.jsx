@@ -60,15 +60,55 @@ export default function InteractiveReport({ lead, audience = "client", onOpenPdf
 
   const hasData = Number(lead.income) > 0 || Number(lead.expenses) > 0 || Number(lead.savings) > 0 || (Array.isArray(lead.goals) && lead.goals.length > 0);
 
-  // Authorship: ONLY referral source advisor gets credited. If no referral, default strictly to Jagat Turkiya, Certified Financial Planner.
-  const hasReferralSource = Boolean(lead.sourceAdvisor?.advisorName && lead.sourceAdvisor.advisorName.trim());
-  const activeAdvisorName = hasReferralSource
-    ? lead.sourceAdvisor.advisorName.trim()
-    : "Jagat Turkiya";
+  // Respective Advisor Authorship Resolution
+  let activeAdvisorName = lead.sourceAdvisor?.advisorName?.trim() || "";
+  let activeAdvisorDesignation = lead.sourceAdvisor?.advisorDesignation || "";
 
-  const activeAdvisorDesignation = hasReferralSource
-    ? (lead.sourceAdvisor.advisorDesignation || "Certified Financial Advisor")
-    : "Certified Financial Planner";
+  if (!activeAdvisorName && lead.assignedTo?.advisorName && lead.assignedTo.advisorName !== "Unassigned" && lead.assignedTo.advisorName !== "All Advisors") {
+    activeAdvisorName = lead.assignedTo.advisorName.trim();
+    activeAdvisorDesignation = lead.assignedTo.advisorDesignation || "";
+  }
+
+  const storedRef = (typeof window !== "undefined")
+    ? (lead.referralCode || localStorage.getItem("ff_referral_code") || sessionStorage.getItem("ff_referral_code") || "")
+    : (lead.referralCode || "");
+
+  if (!activeAdvisorName && storedRef) {
+    try {
+      const rawTeam = localStorage.getItem("ff_team_users");
+      if (rawTeam) {
+        const team = JSON.parse(rawTeam);
+        const refLower = storedRef.toLowerCase();
+        const baseHandle = refLower.includes("-") ? refLower.split("-")[0] : refLower;
+        const matched = team.find((u) => 
+          (u.referralCode && u.referralCode.toLowerCase() === refLower) ||
+          (u.username && u.username.toLowerCase() === refLower) ||
+          (u.username && u.username.toLowerCase() === baseHandle) ||
+          (u.name && u.name.toLowerCase().replace(/[^a-z0-9]/g, "") === refLower) ||
+          (u.name && u.name.toLowerCase().replace(/[^a-z0-9]/g, "") === baseHandle)
+        );
+        if (matched) {
+          activeAdvisorName = matched.name;
+          activeAdvisorDesignation = matched.designation || "Certified Financial Advisor";
+        }
+      }
+    } catch (e) {}
+
+    if (!activeAdvisorName) {
+      const baseHandle = storedRef.replace(/[-_0-9]+$/, "").replace(/[-_]+/g, " ").trim();
+      if (baseHandle) {
+        activeAdvisorName = baseHandle.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      }
+    }
+  }
+
+  if (!activeAdvisorName) {
+    activeAdvisorName = "Jagat Turkiya";
+    activeAdvisorDesignation = "Certified Financial Planner";
+  }
+  if (!activeAdvisorDesignation) {
+    activeAdvisorDesignation = "Certified Financial Advisor";
+  }
 
   // Priority recommendations logic
   const highPriority = [];

@@ -16,6 +16,12 @@ const formResponseSchema = new mongoose.Schema(
     },
     source: { type: String, default: "Forms Portal (/forms)" },
     referralCode: { type: String, default: "", index: true },
+    sourceAdvisor: {
+      advisorId:          { type: String, default: null, index: true },
+      advisorName:        { type: String, default: "" },
+      advisorEmail:       { type: String, default: "" },
+      advisorDesignation: { type: String, default: "Certified Financial Advisor" }
+    },
     assignedTo: {
       advisorId:          { type: String, default: null, index: true },
       advisorName:        { type: String, default: "" },

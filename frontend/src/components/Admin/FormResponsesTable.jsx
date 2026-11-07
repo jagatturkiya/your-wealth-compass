@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  Search, Phone, Download, Trash2, Eye
+  Search, Phone, Download, Trash2, Eye, Share2, Copy, Check
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { assignFormResponseAdvisorApi, bulkAssignFormResponsesApi } from "../../services/api";
@@ -36,7 +36,7 @@ export default function FormResponsesTable({
   teamUsers = [],
   adminRole = "superadmin",
   adminToken = "",
-  onRefresh = () => {}
+  onRefresh = () => { }
 }) {
   const { formResponses = [], updateFormResponseStatus, deleteFormResponse } = useApp();
 
@@ -47,6 +47,33 @@ export default function FormResponsesTable({
   const [actionNotice, setActionNotice] = useState("");
   const [assigningId, setAssigningId] = useState(null);
   const [isBulkAssigning, setIsBulkAssigning] = useState(false);
+
+  const [selectedRefAdvisorId, setSelectedRefAdvisorId] = useState(() => {
+    return (teamUsers && teamUsers[0] && (teamUsers[0].id || teamUsers[0]._id)) || "general";
+  });
+  const [copiedFormRef, setCopiedFormRef] = useState(false);
+  const [copiedAssessmentRef, setCopiedAssessmentRef] = useState(false);
+
+  const activeRefUser = teamUsers.find((u) => (u.id || u._id) === selectedRefAdvisorId);
+  const activeRefCode = activeRefUser ? (activeRefUser.referralCode || activeRefUser.username || (activeRefUser.name ? activeRefUser.name.toLowerCase().replace(/[^a-z0-9]/g, "") : "")) : "";
+  const formRefUrl = activeRefCode ? `https://www.yourwealthcompass.in/forms?ref=${activeRefCode}` : "https://www.yourwealthcompass.in/forms";
+  const assessmentRefUrl = activeRefCode ? `https://www.yourwealthcompass.in/?ref=${activeRefCode}` : "https://www.yourwealthcompass.in/";
+
+  const handleCopyFormRef = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(formRefUrl);
+      setCopiedFormRef(true);
+      setTimeout(() => setCopiedFormRef(false), 2000);
+    }
+  };
+
+  const handleCopyAssessmentRef = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(assessmentRefUrl);
+      setCopiedAssessmentRef(true);
+      setTimeout(() => setCopiedAssessmentRef(false), 2000);
+    }
+  };
 
   const safeResponses = Array.isArray(formResponses) ? formResponses : [];
 
@@ -238,6 +265,102 @@ export default function FormResponsesTable({
           {actionNotice}
         </div>
       )}
+
+      {/* 0. Business Partner Advisors Referral Link Bar */}
+      <div
+        className="ff-card-glass"
+        style={{
+          padding: "10px 14px",
+          borderRadius: 12,
+          border: "1px solid var(--border-gold)",
+          background: "linear-gradient(135deg, rgba(201, 154, 75, 0.08) 0%, rgba(13, 14, 21, 0.95) 100%)",
+          marginBottom: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 10
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Share2 size={14} color="var(--accent-gold)" />
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-main)" }}>
+              Referral Link – Business Partner Advisors:
+            </span>
+          </div>
+
+          {adminRole === "superadmin" && teamUsers.length > 0 && (
+            <select
+              className="ff-select"
+              value={selectedRefAdvisorId}
+              onChange={(e) => setSelectedRefAdvisorId(e.target.value)}
+              style={{
+                height: 28,
+                fontSize: 12,
+                padding: "2px 10px",
+                borderColor: "var(--border-gold)",
+                color: "var(--accent-gold)",
+                background: "rgba(0,0,0,0.6)",
+                borderRadius: 8
+              }}
+            >
+              <option value="general">🌐 General Portal (No Advisor Ref)</option>
+              {teamUsers.map((u) => (
+                <option key={u.id || u._id} value={u.id || u._id}>
+                  👤 {u.name} ({u.referralCode || u.username || "ref"})
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <code style={{ fontSize: 11.5, color: "var(--accent-gold)", background: "rgba(0,0,0,0.5)", padding: "4px 8px", borderRadius: 6, fontFamily: "var(--font-mono)" }}>
+            {formRefUrl}
+          </code>
+          <button
+            type="button"
+            onClick={handleCopyFormRef}
+            className="ff-btn-primary"
+            style={{
+              height: 28,
+              padding: "0 10px",
+              fontSize: 11,
+              fontWeight: 700,
+              borderRadius: 6,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              background: "var(--accent-gold)",
+              color: "#07080C"
+            }}
+          >
+            {copiedFormRef ? <><Check size={11} /> Copied Form</> : <><Copy size={11} /> Copy Form Link</>}
+          </button>
+          <button
+            type="button"
+            onClick={handleCopyAssessmentRef}
+            className="ff-btn-ghost"
+            style={{
+              height: 28,
+              padding: "0 10px",
+              fontSize: 11,
+              fontWeight: 700,
+              borderRadius: 6,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              border: "1px solid var(--border-subtle)",
+              color: "var(--text-fog)"
+            }}
+          >
+            {copiedAssessmentRef ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy Assessment</>}
+          </button>
+        </div>
+      </div>
 
       {/* 1. Full-Width Clean Search Bar (Zero Extra Gap) */}
       <div style={{ position: "relative", width: "100%", marginBottom: 8 }}>

@@ -74,6 +74,23 @@ export default function FormsPortal({ onRedirectHome }) {
     education: ""
   });
 
+  const [referralCode, setReferralCode] = useState(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const hp = new URLSearchParams(window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "");
+      const fromUrl = sp.get("ref") || sp.get("advisor") || sp.get("partner") || hp.get("ref") || hp.get("advisor") || hp.get("partner");
+      if (fromUrl && fromUrl.trim()) {
+        const clean = fromUrl.trim().toLowerCase();
+        localStorage.setItem("ff_referral_code", clean);
+        sessionStorage.setItem("ff_referral_code", clean);
+        return clean;
+      }
+      return localStorage.getItem("ff_referral_code") || "";
+    } catch (e) {
+      return "";
+    }
+  });
+
   const [recordEmailConsent, setRecordEmailConsent] = useState(true);
   const [formErrors, setFormErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -147,6 +164,15 @@ export default function FormsPortal({ onRedirectHome }) {
           (p) => p.value.toLowerCase() === profValRaw.toLowerCase()
         );
         matchedProf = foundProf ? foundProf.value : "Others";
+      }
+
+      // Check referral code parameter
+      const refVal = getVal("ref", "advisor", "partner");
+      if (refVal) {
+        const cleanRef = refVal.toLowerCase();
+        setReferralCode(cleanRef);
+        localStorage.setItem("ff_referral_code", cleanRef);
+        sessionStorage.setItem("ff_referral_code", cleanRef);
       }
 
       setFormData((prev) => ({
@@ -328,6 +354,7 @@ export default function FormsPortal({ onRedirectHome }) {
           city: effectiveCity,
           education: effectiveEducation,
           profession: effectiveProfession,
+          referralCode: referralCode || "",
           notes: `Consent recorded: ${recordEmailConsent ? "yes" : "no"}`
         }).catch((err) => console.warn("Form response save notice:", err));
       }
@@ -338,7 +365,8 @@ export default function FormsPortal({ onRedirectHome }) {
         email: formData.email.trim(),
         mobile: formData.mobile.trim(),
         topic: "Application Form",
-        message: `City: ${effectiveCity} | Education: ${effectiveEducation} | Profession: ${effectiveProfession} | Verified Email: ${formData.email}`
+        referralCode: referralCode || "",
+        message: `City: ${effectiveCity} | Education: ${effectiveEducation} | Profession: ${effectiveProfession} | Verified Email: ${formData.email}${referralCode ? ` | Ref: ${referralCode}` : ""}`
       }).catch((enqErr) => console.warn("Enquiry DB sync notice:", enqErr));
 
       // Success screen transition
@@ -592,6 +620,26 @@ export default function FormsPortal({ onRedirectHome }) {
             <form onSubmit={handleSubmit} style={{ width: "100%", boxSizing: "border-box" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
                 
+                {/* Referral Attribution Badge */}
+                {referralCode && (
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 14px",
+                      background: "rgba(201, 154, 75, 0.12)",
+                      border: "1px solid rgba(201, 154, 75, 0.35)",
+                      borderRadius: 10,
+                      fontSize: 12.5,
+                      color: "var(--accent-gold)",
+                      fontWeight: 600
+                    }}
+                  >
+                    <span>🤝</span> Referred by Business Partner Advisor: <strong>{referralCode}</strong>
+                  </div>
+                )}
+
                 {/* 1. EMAIL WITH VERIFIED RECORD CARD (Compulsory) */}
                 <div
                   style={{

@@ -42,15 +42,24 @@ async function resolveAdvisorAssignment(referralCode) {
   // 1. If referral code is provided, try to match advisor directly
   if (cleanRef) {
     try {
+      const baseHandle = cleanRef.includes("-") ? cleanRef.split("-")[0].trim() : cleanRef;
+      const orConditions = [
+        { referralCode: cleanRef },
+        { username: cleanRef },
+        { email: cleanRef },
+        { name: new RegExp("^" + cleanRef.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") }
+      ];
+
+      if (baseHandle && baseHandle !== cleanRef) {
+        orConditions.push({ username: baseHandle });
+        orConditions.push({ referralCode: baseHandle });
+        orConditions.push({ name: new RegExp("^" + baseHandle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") });
+      }
+
       const matchedAdvisor = await User.findOne({
-        role: "advisor",
+        role: { $in: ["advisor", "superadmin", "creator", "advisor_creator", "admin"] },
         status: "active",
-        $or: [
-          { referralCode: cleanRef },
-          { username: cleanRef },
-          { email: cleanRef },
-          { name: new RegExp("^" + cleanRef + "$", "i") }
-        ]
+        $or: orConditions
       }).lean();
 
       if (matchedAdvisor) {
@@ -315,6 +324,9 @@ router.get("/my-assessments", async (req, res) => {
         retirementAge: l.retirementAge || "60"
       },
       pdfUrl: l.pdfUrl || null,
+      sourceAdvisor: l.sourceAdvisor || {},
+      assignedTo: l.assignedTo || {},
+      referralCode: l.referralCode || "",
       submittedAt: l.createdAt,
       updatedAt: l.updatedAt,
     }));
@@ -451,6 +463,7 @@ router.post("/form-response", async (req, res) => {
         status: "new",
         source: "Forms Portal (/forms)",
         referralCode: refCode,
+        sourceAdvisor: sourceAdvisor,
         assignedTo: assignedData,
         notes: notes ? [{ text: notes, author: "System" }] : []
       });
@@ -524,7 +537,7 @@ router.post("/form-response", async (req, res) => {
     }
 
     const responseData = createdResponse
-      ? createdResponse.toObject()
+      ? { ...createdResponse.toObject(), sourceAdvisor }
       : {
           _id: "fr_" + Date.now(),
           id: "fr_" + Date.now(),
@@ -535,6 +548,9 @@ router.post("/form-response", async (req, res) => {
           education: cleanEdu,
           profession: cleanProf,
           status: "new",
+          sourceAdvisor,
+          referralCode: refCode,
+          assignedTo: assignedData,
           createdAt: new Date().toISOString()
         };
 

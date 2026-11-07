@@ -57,12 +57,14 @@ export default function AdvisorTeamManager({
   const previewRefCode = refSuffix ? `${rawUserHandle}-${refSuffix}` : rawUserHandle;
   const previewRefUrl = `https://www.yourwealthcompass.in/?ref=${previewRefCode}`;
 
-  const handleCopyLink = (u) => {
+  const handleCopyLink = (u, mode = "assessment") => {
     const code = u.referralCode || u.username || (u.name ? u.name.toLowerCase().replace(/[^a-z0-9]/g, "") : "");
-    const link = `https://www.yourwealthcompass.in/?ref=${code}`;
+    const link = mode === "forms"
+      ? `https://www.yourwealthcompass.in/forms?ref=${code}`
+      : `https://www.yourwealthcompass.in/?ref=${code}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(link);
-      setCopiedId(u.id);
+      setCopiedId(`${u.id || u._id}_${mode}`);
       setTimeout(() => setCopiedId(""), 2000);
     }
   };
@@ -415,30 +417,46 @@ export default function AdvisorTeamManager({
 
                       {/* Referral Link with Copy */}
                       <td style={{ padding: "14px 12px", whiteSpace: "nowrap" }}>
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.35)", padding: "4px 8px", borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
-                          <code style={{ fontSize: 11, color: "var(--accent-gold)", fontFamily: "var(--font-mono)" }}>
-                            ?ref={refCode}
-                          </code>
-                          <button
-                            onClick={() => handleCopyLink(u)}
-                            className="ff-btn-ghost"
-                            style={{
-                              height: 24,
-                              padding: "0 8px",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              borderRadius: 6,
-                              border: "1px solid var(--border-subtle)",
-                              color: copiedId === u.id ? "#34D399" : "var(--text-fog)",
-                              cursor: "pointer",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 4
-                            }}
-                            title="Copy full client referral link"
-                          >
-                            {copiedId === u.id ? "✓ Copied" : <><Copy size={11} /> Copy</>}
-                          </button>
+                        <div style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.35)", padding: "3px 8px", borderRadius: 6, border: "1px solid var(--border-subtle)" }}>
+                            <code style={{ fontSize: 11, color: "var(--accent-gold)", fontFamily: "var(--font-mono)" }}>
+                              ?ref={refCode}
+                            </code>
+                            <button
+                              onClick={() => handleCopyLink(u, "assessment")}
+                              className="ff-btn-ghost"
+                              style={{
+                                height: 22,
+                                padding: "0 6px",
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                borderRadius: 4,
+                                border: "1px solid var(--border-subtle)",
+                                color: copiedId === `${u.id || u._id}_assessment` ? "#34D399" : "var(--text-fog)",
+                                cursor: "pointer"
+                              }}
+                              title="Copy full client assessment referral link"
+                            >
+                              {copiedId === `${u.id || u._id}_assessment` ? "✓ Copied" : "Copy Assessment"}
+                            </button>
+                            <button
+                              onClick={() => handleCopyLink(u, "forms")}
+                              className="ff-btn-ghost"
+                              style={{
+                                height: 22,
+                                padding: "0 6px",
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                borderRadius: 4,
+                                border: "1px solid var(--border-gold)",
+                                color: copiedId === `${u.id || u._id}_forms` ? "#34D399" : "var(--accent-gold)",
+                                cursor: "pointer"
+                              }}
+                              title="Copy /forms application referral link"
+                            >
+                              {copiedId === `${u.id || u._id}_forms` ? "✓ Copied" : "Copy Form (/forms)"}
+                            </button>
+                          </div>
                         </div>
                       </td>
 
@@ -529,9 +547,9 @@ export default function AdvisorTeamManager({
 
       {/* 4. MODAL: CREATE NEW ADVISOR */}
       {isCreateModalOpen && (
-        <div className="ff-modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(5, 6, 10, 0.88)", backdropFilter: "blur(12px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div className="ff-modal-card" style={{ width: "100%", maxWidth: 520, background: "#0D0E15", border: "1px solid var(--border-gold)", borderRadius: 20, padding: "28px 32px", color: "var(--text-main)", textAlign: "left" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div className="ff-modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(5, 6, 10, 0.88)", backdropFilter: "blur(12px)", zIndex: 99999, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 16px", overflowY: "auto" }}>
+          <div className="ff-modal-card" style={{ width: "100%", maxWidth: 540, maxHeight: "calc(100vh - 48px)", display: "flex", flexDirection: "column", background: "#0D0E15", border: "1px solid var(--border-gold)", borderRadius: 20, padding: "24px 26px", color: "var(--text-main)", textAlign: "left", margin: "auto 0", overflow: "hidden" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <UserPlus size={20} color="var(--accent-gold)" />
                 <h3 style={{ fontSize: 20, fontWeight: 700, margin: 0, fontFamily: "var(--font-serif)" }}>
@@ -549,7 +567,7 @@ export default function AdvisorTeamManager({
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{createSuccess}</div>
               </div>
             ) : (
-              <form onSubmit={handleCreateSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <form onSubmit={handleCreateSubmit} style={{ display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", paddingRight: 6, flex: 1 }}>
                 {createError && (
                   <div style={{ background: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#F87171", padding: "10px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600 }}>
                     {createError}
@@ -598,11 +616,11 @@ export default function AdvisorTeamManager({
                   </div>
                 </div>
 
-                {/* Live Referral Link Preview */}
-                <div style={{ background: "rgba(201, 154, 75, 0.08)", border: "1px dashed var(--border-gold)", borderRadius: 10, padding: "10px 14px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                {/* Live Referral Link Previews (Assessment & Form) */}
+                <div style={{ background: "rgba(201, 154, 75, 0.08)", border: "1px dashed var(--border-gold)", borderRadius: 10, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontSize: 11, color: "var(--accent-gold)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                      Generated Referral Link
+                      Generated Referral Links
                     </div>
                     {previewRefCode && (
                       <span style={{ fontSize: 10, color: "var(--text-fog)", fontFamily: "var(--font-mono)" }}>
@@ -610,8 +628,17 @@ export default function AdvisorTeamManager({
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12.5, color: "var(--text-main)", fontFamily: "var(--font-mono)", wordBreak: "break-all" }}>
-                    {previewRefUrl}
+                  <div>
+                    <div style={{ fontSize: 10, color: "var(--text-fog)", marginBottom: 1 }}>1. Assessment Wizard Link:</div>
+                    <code style={{ fontSize: 11.5, color: "var(--text-main)", fontFamily: "var(--font-mono)", wordBreak: "break-all" }}>
+                      {previewRefUrl}
+                    </code>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: "var(--text-fog)", marginBottom: 1 }}>2. Forms Application Link (/forms):</div>
+                    <code style={{ fontSize: 11.5, color: "var(--accent-gold)", fontFamily: "var(--font-mono)", wordBreak: "break-all" }}>
+                      https://www.yourwealthcompass.in/forms?ref={previewRefCode}
+                    </code>
                   </div>
                 </div>
 
@@ -746,7 +773,7 @@ export default function AdvisorTeamManager({
                   )}
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 14, borderTop: "1px solid var(--border-subtle)", marginTop: 6, flexShrink: 0 }}>
                   <button
                     type="button"
                     onClick={() => setIsCreateModalOpen(false)}

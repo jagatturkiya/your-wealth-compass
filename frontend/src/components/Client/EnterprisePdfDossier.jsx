@@ -1,6 +1,32 @@
 import React from "react";
-import { X, Download, Printer, Shield, CheckCircle2, AlertTriangle, HeartPulse, PiggyBank, GraduationCap, Heart, Home, Award, TrendingUp, Layers, Compass, CheckSquare } from "lucide-react";
+import { X, Download, Printer, Shield, CheckCircle2, AlertTriangle, HeartPulse, PiggyBank, GraduationCap, Heart, Home, Award, TrendingUp, Layers, Compass, CheckSquare, Globe } from "lucide-react";
 import { computeReport, INR, INR_L, EDU_INFLATION, MARRIAGE_INFLATION, RETIREMENT_INFLATION, SHORT_TERM_RETURN, GUARANTEED_RETURN, SWP_RETURN, EMERGENCY_MONTHS } from "../../utils/financialEngine";
+
+function PrintPageFooter() {
+  return (
+    <div
+      className="epdf-page-footer-branding"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        paddingTop: 10,
+        borderTop: "1px solid #E5E7EB",
+        marginTop: "auto"
+      }}
+    >
+      <span style={{ fontSize: 9.5, color: "#9CA3AF", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
+        Powered by
+      </span>
+      <img
+        src="/apkacoach-logo-dark.png"
+        alt="Apka Coach"
+        style={{ height: 15, width: "auto", objectFit: "contain" }}
+      />
+    </div>
+  );
+}
 
 export default function EnterprisePdfDossier({ lead, onClose }) {
   if (!lead) return null;
@@ -13,15 +39,55 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
   const dateStr = new Date(lead.submittedAt || Date.now()).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
   const clientCity = lead.city || lead.protection?.city || "";
 
-  // Authorship: ONLY referral source advisor gets credited. If no referral, default strictly to Jagat Turkiya, Certified Financial Planner.
-  const hasReferralSource = Boolean(lead.sourceAdvisor?.advisorName && lead.sourceAdvisor.advisorName.trim());
-  const activeAdvisorName = hasReferralSource
-    ? lead.sourceAdvisor.advisorName.trim()
-    : "Jagat Turkiya";
+  // Respective Advisor Authorship Resolution
+  let activeAdvisorName = lead.sourceAdvisor?.advisorName?.trim() || "";
+  let activeAdvisorDesignation = lead.sourceAdvisor?.advisorDesignation || "";
 
-  const activeAdvisorDesignation = hasReferralSource
-    ? (lead.sourceAdvisor.advisorDesignation || "Certified Financial Advisor")
-    : "Certified Financial Planner";
+  if (!activeAdvisorName && lead.assignedTo?.advisorName && lead.assignedTo.advisorName !== "Unassigned" && lead.assignedTo.advisorName !== "All Advisors") {
+    activeAdvisorName = lead.assignedTo.advisorName.trim();
+    activeAdvisorDesignation = lead.assignedTo.advisorDesignation || "";
+  }
+
+  const storedRef = (typeof window !== "undefined")
+    ? (lead.referralCode || localStorage.getItem("ff_referral_code") || sessionStorage.getItem("ff_referral_code") || "")
+    : (lead.referralCode || "");
+
+  if (!activeAdvisorName && storedRef) {
+    try {
+      const rawTeam = localStorage.getItem("ff_team_users");
+      if (rawTeam) {
+        const team = JSON.parse(rawTeam);
+        const refLower = storedRef.toLowerCase();
+        const baseHandle = refLower.includes("-") ? refLower.split("-")[0] : refLower;
+        const matched = team.find((u) => 
+          (u.referralCode && u.referralCode.toLowerCase() === refLower) ||
+          (u.username && u.username.toLowerCase() === refLower) ||
+          (u.username && u.username.toLowerCase() === baseHandle) ||
+          (u.name && u.name.toLowerCase().replace(/[^a-z0-9]/g, "") === refLower) ||
+          (u.name && u.name.toLowerCase().replace(/[^a-z0-9]/g, "") === baseHandle)
+        );
+        if (matched) {
+          activeAdvisorName = matched.name;
+          activeAdvisorDesignation = matched.designation || "Certified Financial Advisor";
+        }
+      }
+    } catch (e) {}
+
+    if (!activeAdvisorName) {
+      const baseHandle = storedRef.replace(/[-_0-9]+$/, "").replace(/[-_]+/g, " ").trim();
+      if (baseHandle) {
+        activeAdvisorName = baseHandle.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      }
+    }
+  }
+
+  if (!activeAdvisorName) {
+    activeAdvisorName = "Jagat Turkiya";
+    activeAdvisorDesignation = "Certified Financial Planner";
+  }
+  if (!activeAdvisorDesignation) {
+    activeAdvisorDesignation = "Certified Financial Advisor";
+  }
 
   const [isPrinting, setIsPrinting] = React.useState(false);
   const [printStatusText, setPrintStatusText] = React.useState("Preparing Document Layout...");
@@ -284,6 +350,18 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
           font-family: 'JetBrains Mono', monospace;
         }
 
+        .epdf-page-footer-branding {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 8px !important;
+          padding-top: 10px !important;
+          border-top: 1px solid #E5E7EB !important;
+          margin-top: auto !important;
+          visibility: visible !important;
+          z-index: 10 !important;
+        }
+
         .epdf-h2 {
           font-size: 20px;
           font-weight: 800;
@@ -457,11 +535,26 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
           .epdf-page {
             width: 210mm !important;
             height: 297mm !important;
-            padding: 20mm !important;
+            padding: 16mm 20mm 12mm !important;
             page-break-after: always !important;
             break-after: page !important;
             border-bottom: none !important;
             box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            position: relative !important;
+          }
+          .epdf-page-footer-branding {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 8px !important;
+            padding-top: 8px !important;
+            border-top: 1px solid #E5E7EB !important;
+            margin-top: auto !important;
+            visibility: visible !important;
+            z-index: 10 !important;
           }
         }
       `}</style>
@@ -527,92 +620,162 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
           } : {}}
         >
 
-        {/* ================= PAGE 1: COVER PAGE ================= */}
-        <div className="epdf-page" style={{ background: "#FCFBF8", position: "relative" }}>
+        {/* ================= PAGE 1: COVER PAGE (Template Styled) ================= */}
+        <div className="epdf-page epdf-cover-page" style={{ background: "#FFFFFF", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "18mm 20mm" }}>
           
-          {/* Subtle top gold accent pattern bar */}
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, background: "linear-gradient(90deg, #C8A74D 0%, #1B2035 100%)" }} />
+          {/* Geometric Corner Background Vectors Matching Template */}
+          <svg
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none",
+              zIndex: 1
+            }}
+            viewBox="0 0 794 1123"
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <pattern id="dotGridCover" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+                <circle cx="8" cy="8" r="2.2" fill="#F5A623" opacity="0.85" />
+              </pattern>
+            </defs>
 
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12 }}>
-              <div className="epdf-brand" style={{ fontSize: 20, color: "#1B2035" }}>Your <span style={{ color: "#C8A74D" }}>Wealth</span> Compass</div>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
-                  Report ID: {reportId}
+            {/* Top-Left Geometric Triangles */}
+            <polygon points="0,0 170,0 0,170" fill="#F5A623" />
+            <polygon points="35,0 210,0 0,210 0,110" fill="#1E2028" opacity="0.95" />
+            <polygon points="0,55 90,0 0,0" fill="#E09214" />
+            <rect x="220" y="10" width="220" height="48" fill="url(#dotGridCover)" />
+
+            {/* Top-Right Angular Accents & Dots */}
+            <polygon points="630,0 794,0 794,55 710,0" fill="#F5A623" opacity="0.9" />
+            <polygon points="730,0 794,0 794,130" fill="#1E2028" opacity="0.85" />
+            <rect x="520" y="10" width="200" height="48" fill="url(#dotGridCover)" />
+
+            {/* Bottom-Left Dot Grid and Accent Polygon */}
+            <rect x="15" y="1010" width="180" height="48" fill="url(#dotGridCover)" />
+            <polygon points="0,1123 135,1123 0,1025" fill="#F5A623" />
+            <polygon points="0,1123 75,1123 0,1070" fill="#E09214" />
+
+            {/* Bottom-Right Layered Polygons */}
+            <polygon points="630,1123 794,1123 794,925 660,1025" fill="#1E2028" />
+            <polygon points="690,1123 794,1123 794,1015" fill="#F5A623" />
+            <polygon points="570,1123 690,1123 794,965 720,890" fill="#111317" opacity="0.9" />
+            <polygon points="745,1123 794,1123 794,1075" fill="#F5A623" />
+          </svg>
+
+          {/* Top Header: PROJECT ID & Date */}
+          <div style={{ position: "relative", zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 4 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(245, 166, 35, 0.1)", border: "1.5px solid #F5A623", padding: "5px 14px", borderRadius: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#1B2035", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em" }}>
+                PROJECT ID: {reportId}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+              {dateStr}
+            </div>
+          </div>
+
+          {/* Center Main Box & Details Area */}
+          <div style={{ position: "relative", zIndex: 5, margin: "auto 0", padding: "20px 0" }}>
+            {/* Template Central Branded Frame */}
+            <div
+              style={{
+                position: "relative",
+                background: "#FFFFFF",
+                border: "3.5px solid #F5A623",
+                borderRadius: 18,
+                padding: "44px 44px 38px",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.05)",
+                overflow: "hidden"
+              }}
+            >
+              {/* Corner Diagonal Accent Stripes */}
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: -2,
+                  right: -2,
+                  width: 90,
+                  height: 90,
+                  pointerEvents: "none"
+                }}
+              >
+                <svg viewBox="0 0 90 90" width="90" height="90" style={{ display: "block" }}>
+                  <polygon points="40,90 55,90 90,55 90,40" fill="#1E2028" />
+                  <polygon points="62,90 90,90 90,62" fill="#F5A623" />
+                </svg>
+              </div>
+
+              <div style={{ fontSize: 40, fontWeight: 900, lineHeight: 1.15, letterSpacing: "-0.01em", textTransform: "uppercase" }}>
+                <span style={{ color: "#1E2028" }}>YOUR </span>
+                <span style={{ color: "#F5A623" }}>WEALTH</span>
+                <br />
+                <span style={{ color: "#1E2028" }}>COMPASS</span>
+              </div>
+            </div>
+
+            {/* Prepared By & Prepared For (Populated with Respective Info) */}
+            <div style={{ marginTop: 46, paddingLeft: 8 }}>
+              {/* Prepared by */}
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>
+                  Prepared by:
                 </div>
-                <div style={{ fontSize: 10, color: "#C8A74D", fontWeight: 800, background: "#FFFBEB", border: "1px solid #FCD34D", padding: "2px 8px", borderRadius: 4 }}>
-                  Page 1 of 10
+                <div style={{ fontSize: 23, fontWeight: 800, color: "#1E2028", letterSpacing: "-0.01em" }}>
+                  {activeAdvisorName}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#C8A74D", marginTop: 2 }}>
+                  {activeAdvisorDesignation}
                 </div>
               </div>
-            </div>
 
-            {/* Main Cover Hero */}
-            <div style={{ marginTop: 40, marginBottom: 28 }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.15em", color: "#C8A74D", fontWeight: 800, marginBottom: 8 }}>
-                PERSONAL WEALTH ANALYSIS
-              </div>
-              <h1 style={{ fontSize: 32, fontWeight: 800, color: "#1B2035", margin: "0 0 10px", lineHeight: 1.15 }}>
-                Financial Fitness Report
-              </h1>
-              <div style={{ width: 60, height: 3, background: "#C8A74D", margin: "12px 0 16px" }} />
-              <p style={{ fontSize: 12.5, color: "#6B7280", maxWidth: 480, lineHeight: 1.6, margin: 0 }}>
-                Comprehensive financial analysis report evaluating cashflow capacity, milestone goal inflation, post-retirement SWP longevity, and risk protection buffers.
-              </p>
-            </div>
-
-            {/* Prepared For Box */}
-            <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 10, padding: "18px 22px", marginBottom: 24, boxShadow: "0 4px 12px rgba(0,0,0,0.03)" }}>
-              <div style={{ fontSize: 9.5, textTransform: "uppercase", color: "#6B7280", fontWeight: 700, letterSpacing: "0.1em" }}>PREPARED EXCLUSIVELY FOR</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: "#1B2035", marginTop: 4 }}>{lead.name ? lead.name.toUpperCase() : "CLIENT PROFILE"}</div>
-              <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
-                {lead.age ? `Age ${lead.age}` : "Age Unspecified"}{clientCity ? ` • ${clientCity}` : ""}
-              </div>
-            </div>
-
-            {/* Score Callout Card */}
-            <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderLeft: "4px solid #C8A74D", borderRadius: 10, padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              {/* Prepared for */}
               <div>
-                <div style={{ fontSize: 10, textTransform: "uppercase", color: "#6B7280", fontWeight: 700 }}>OVERALL FINANCIAL HEALTH SCORE</div>
-                <div style={{ fontSize: 36, fontWeight: 800, color: "#1B2035", marginTop: 2, fontFamily: "monospace" }}>
-                  {r.scores.overallScore} <span style={{ fontSize: 16, color: "#6B7280", fontWeight: 500 }}>/ 100</span>
+                <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>
+                  Prepared for:
                 </div>
-              </div>
-              <div style={{
-                background: r.scores.overallScore >= 70 ? "#ECFDF5" : r.scores.overallScore >= 40 ? "#FFFBEB" : "#FEF2F2",
-                color: scoreColor(r.scores.overallScore),
-                border: `1px solid ${scoreColor(r.scores.overallScore)}`,
-                padding: "6px 16px",
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 800,
-                textTransform: "uppercase"
-              }}>
-                {r.scores.overallScore >= 70 ? "ON TRACK" : r.scores.overallScore >= 40 ? "NEEDS IMPROVEMENT" : "NEEDS ATTENTION"}
-              </div>
-            </div>
-
-            {/* 5 Audit Scope Checklist */}
-            <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 10, padding: 18, marginBottom: 20 }}>
-              <div style={{ fontSize: 10, textTransform: "uppercase", color: "#6B7280", fontWeight: 700, marginBottom: 10, letterSpacing: "0.05em" }}>AUDIT SCOPE INCLUDED IN THIS REPORT</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, fontSize: 11.5, color: "#1B2035" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} color="#3E9F6E" /> <b>Retirement Reviewed</b></div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} color="#3E9F6E" /> <b>Insurance Audited</b></div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} color="#3E9F6E" /> <b>Goal Planning</b></div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} color="#3E9F6E" /> <b>Cashflow Analysis</b></div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} color="#3E9F6E" /> <b>Investment Strategy</b></div>
+                <div style={{ fontSize: 23, fontWeight: 800, color: "#1E2028", letterSpacing: "-0.01em" }}>
+                  {lead.name ? lead.name : "Client Profile"}
+                </div>
+                <div style={{ fontSize: 12.5, color: "#6B7280", marginTop: 4 }}>
+                  {lead.age ? `Age ${lead.age}` : ""}{clientCity ? ` • ${clientCity}` : ""}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Metadata Grid */}
-          <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, borderTop: "1px solid #E5E7EB", paddingTop: 14 }}>
-              <div><div style={{ fontSize: 9.5, color: "#6B7280", textTransform: "uppercase" }}>GENERATED ON</div><div style={{ fontSize: 11.5, fontWeight: 700, color: "#1B2035" }}>{dateStr}</div></div>
-              <div>
-                <div style={{ fontSize: 9.5, color: "#6B7280", textTransform: "uppercase" }}>PREPARED BY</div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "#1B2035" }}>{activeAdvisorName}</div>
-                <div style={{ fontSize: 9.5, color: "#C8A74D", fontWeight: 700 }}>{activeAdvisorDesignation}</div>
+          {/* Bottom Cover Footer: www.apkacoach.com & Centered Powered By Apka Coach with Logo */}
+          <div
+            style={{
+              position: "relative",
+              zIndex: 5,
+              borderTop: "1px solid #F3F4F6",
+              paddingTop: 14,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}
+          >
+            {/* Website with Icon */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#6B7280", fontSize: 13, fontWeight: 600 }}>
+              <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#F5A623", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFF" }}>
+                <Globe size={13} />
               </div>
+              <span>www.apkacoach.com</span>
+            </div>
+
+            {/* Powered by Apka Coach with Logo */}
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
+                Powered by
+              </span>
+              <img
+                src="/apkacoach-logo-dark.png"
+                alt="Apka Coach"
+                style={{ height: 16, width: "auto", objectFit: "contain" }}
+              />
             </div>
           </div>
         </div>
@@ -687,7 +850,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
             </div>
           </div>
 
-          <div className="epdf-footer" style={{ display: "none" }}></div>
+          <PrintPageFooter />
         </div>
 
         {/* ================= PAGE 3: FINANCIAL HEALTH & CASHFLOW ANALYSIS ================= */}
@@ -814,7 +977,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
             </div>
           </div>
 
-          <div className="epdf-footer" style={{ display: "none" }}></div>
+          <PrintPageFooter />
         </div>
 
         {/* ================= PAGE 4: GOAL PLANNING & INFLATION IMPACT ================= */}
@@ -930,7 +1093,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
             )}
           </div>
 
-          <div className="epdf-footer" style={{ display: "none" }}></div>
+          <PrintPageFooter />
         </div>
 
         {/* ================= PAGE 5: RETIREMENT BLUEPRINT & SWP SIMULATION ================= */}
@@ -1056,7 +1219,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
             </div>
           </div>
 
-          <div className="epdf-footer" style={{ display: "none" }}></div>
+          <PrintPageFooter />
         </div>
 
         {/* ================= PAGE 6: RISK PROTECTION & INSURANCE AUDIT ================= */}
@@ -1186,7 +1349,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
             </div>
           </div>
 
-          <div className="epdf-footer" style={{ display: "none" }}></div>
+          <PrintPageFooter />
         </div>
 
         {/* ================= PAGE 7: FINANCIAL ACTION ROADMAP (90-DAY PLAN) ================= */}
@@ -1273,6 +1436,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
               </div>
             </div>
           </div>
+          <PrintPageFooter />
         </div>
 
         {/* ================= PAGE 8: WEALTH ALLOCATION BLUEPRINT ================= */}
@@ -1348,7 +1512,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
             </div>
           </div>
 
-          <div className="epdf-footer" style={{ display: "none" }}></div>
+          <PrintPageFooter />
         </div>
 
         {/* ================= PAGE 9: FINANCIAL PROJECTION & SCENARIO ANALYSIS ================= */}
@@ -1465,6 +1629,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
               </p>
             </div>
           </div>
+          <PrintPageFooter />
         </div>
 
         {/* ================= PAGE 10: EXECUTIVE CONCLUSION & CLIENT SUMMARY ================= */}
@@ -1566,7 +1731,7 @@ export default function EnterprisePdfDossier({ lead, onClose }) {
             </div>
           </div>
 
-          <div className="epdf-footer" style={{ display: "none" }}></div>
+          <PrintPageFooter />
         </div>
 
         </div>

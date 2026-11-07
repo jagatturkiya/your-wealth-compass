@@ -6,6 +6,9 @@ export default function StepBasics({ data, onChange, onNext }) {
   const [fieldErrors, setFieldErrors] = useState({ name: "", email: "", mobile: "" });
 
   const currentCountry = getCountryConfig(data.countryCode || "+91");
+  const storedRef = (typeof window !== "undefined")
+    ? (localStorage.getItem("ff_referral_code") || sessionStorage.getItem("ff_referral_code") || "")
+    : "";
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && onNext) {
@@ -68,6 +71,25 @@ export default function StepBasics({ data, onChange, onNext }) {
         <h2 style={{ fontSize: 26, fontWeight: 600, color: "var(--text-main)", fontFamily: "var(--font-sans)", letterSpacing: "-0.01em", margin: 0 }}>
           Let's start with your profile.
         </h2>
+        {storedRef && (
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 12px",
+              background: "rgba(201, 154, 75, 0.12)",
+              border: "1px solid rgba(201, 154, 75, 0.3)",
+              borderRadius: 8,
+              fontSize: 12,
+              color: "var(--accent-gold)",
+              fontWeight: 600,
+              marginTop: 10
+            }}
+          >
+            <span>🤝</span> Connected via Partner Advisor: <strong>{storedRef}</strong>
+          </div>
+        )}
       </div>
 
       {/* FULL NAME */}
